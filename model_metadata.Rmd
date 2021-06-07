@@ -54,77 +54,20 @@ rm(wide_frame_death,d_frame)
 metadata_list <- sapply(death_model_list,
                         function(x)
                         list.files("./data/metadata")[grepl(x,list.files("./data/metadata"))])
-# set colnames
-col_info <- c("team_name", 
-                                 "model_name", 
-                                 "model_abbr", 
-                                 "model_contributors", 
-                                 "website_url", 
-                                 "license", 
-                                 "team_model_designation", 
-                                 "methods",
-                                 "institutional_affil",
-                                 "team_funding",
-                                 "repo_url",
-                                 "twitter_handles",
-                                 "data_inputs",
-                                 "citation",
-                                 "methods_long")
 # start processing
+full_list_death <- map_dfr(metadata_list, 
+                           function(x) {
+                             make_metadata_table(paste0("./data/metadata/",x))
+                           })
 
-check <- get_metadata_table(paste0("./data/metadata/",metadata_list[1]),
-                            sep = ": ",
-                            fill = TRUE, 
-                            header = FALSE)
-
-check <- read.table(paste0("./data/metadata/",metadata_list[2]),
-                    sep = ":",
-                    quote="",
-                    fill = TRUE, 
-                    header = FALSE)
-
-check2 <- read.table(paste0("./data/metadata/",metadata_list[1]),
-                    sep = ":",
-                    quote="",
-                    fill = TRUE, 
-                    header = FALSE)
-
-get_metadata_full <- map_dfr(metadata_list, 
-                             function(metadata_list) {
-                               get_metadata_table(paste("./data-processed/", metadata_list, sep = ""), 
-                                                  sep = ":", 
-                                                  fill = TRUE, 
-                                                  header = FALSE) 
-                             })
-
-## for some reason, this doesn't work using the full list
-metadata_list_full <- list.files(path = "./data-processed", pattern = "metadata", 
-                                 recursive = TRUE, ignore.case = FALSE, include.dirs = TRUE)
-
-get_metadata_full2 <- map_dfr(metadata_list_full, 
-                             function(metadata_list_full) {
-                               get_metadata_table(paste("./data-processed/", metadata_list_full, sep = ""), 
-                                                  sep = ":", 
-                                                  fill = TRUE, 
-                                                  header = FALSE) 
-                             })
-
-#add col names
-colnames(get_metadata_full) <- c("team_name", 
-                                 "model_name", 
-                                 "model_abbr", 
-                                 "model_contributors", 
-                                 "website_url", 
-                                 "license", 
-                                 "team_model_designation", 
-                                 "methods",
-                                 "institutional_affil",
-                                 "team_funding",
-                                 "repo_url",
-                                 "twitter_handles",
-                                 "data_inputs",
-                                 "citation",
-                                 "methods_long")
+# check
+full_list <- list.files("./data/metadata")
+full_list_death <- map_dfr(full_list, 
+                           function(x) {
+                             make_metadata_table(paste0("./data/metadata/",x))
+                           })
+# extract
+# check <- extract_data(full_list_death)
 ```
 
 
@@ -134,9 +77,19 @@ colnames(get_metadata_full) <- c("team_name",
 ```{r}
 #load in data to get models
 wide_frame_case <- read.csv("./data/quantile_frame_inc.csv") 
-c_frame <- frame_format(wide_frame_case,c_frame) 
+c_frame <- frame_format(wide_frame_case) 
 # extract models
 case_model_list <- colnames(c_frame)[7:ncol(c_frame)]
 rm(wide_frame_case)
+
+## start pulling
+metadata_list_case <- sapply(case_model_list,
+                        function(x)
+                        list.files("./data/metadata")[grepl(x,list.files("./data/metadata"))])
+# start processing
+full_list_case <- map_dfr(metadata_list_case, 
+                           function(x) {
+                             make_metadata_table(paste0("./data/metadata/",x))
+                           })
 ```
 

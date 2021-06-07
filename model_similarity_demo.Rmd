@@ -232,6 +232,8 @@ grid.arrange(p_61, p_62,p_63, p_64,
              ncol=2)
 grid.arrange(p_121, p_122,p_123, p_124, 
              ncol=2)
+grid.arrange(p_341, p_342,p_343, p_344, 
+             ncol=2)
 grid.arrange(p_361, p_362,p_363, p_364, 
              ncol=2)
 grid.arrange(p_481, p_482,p_483, p_484, 
