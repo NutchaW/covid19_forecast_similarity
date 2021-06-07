@@ -145,7 +145,10 @@ death_truth <- load_truth("JHU",
                 location != "US") %>%
   dplyr::arrange(desc(value))
 # get bottom 5
-dlocs <- 
+dlocs <- death_truth %>%
+  dplyr::filter(location < 60) %>% 
+  slice_min(n=5, order_by = value)
+  
 # do the same for cases
 cases_truth <- load_truth("JHU", 
                           "inc case", 
@@ -158,7 +161,9 @@ cases_truth <- load_truth("JHU",
                 location != "US")%>%
   dplyr::arrange(desc(value))
 # get bottom 5
-clocs <- 
+clocs <- cases_truth %>%
+  dplyr::filter(location < 60) %>% 
+  slice_min(n=5, order_by = value)
   
 # run to build
   for(i in 1:4){
