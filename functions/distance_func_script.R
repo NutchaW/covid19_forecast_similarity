@@ -1,0 +1,196 @@
+## wrapper and functions for calculating pairwise CvM
+## a function to format the dataframe
+frame_format <- function(zoltr_frame){
+  n_locs <- length(unique(zoltr_frame$location))
+  # filter
+  formatted_frame <- zoltr_frame %>%
+    dplyr::filter(!any(is.na(value)),
+                  !any(is.null(value))) %>%
+    # filtering on quantile, which is the smallest
+    dplyr::group_by(location, horizon,  target_end_date, model) %>%
+    mutate(n_q = n_distinct(quantile)) %>%
+    ungroup() %>%
+    dplyr::filter(n_q==max(n_q)) %>%
+    dplyr::select(-"n_q") %>%
+    # start filtering date and location and horizon
+    group_by(model, horizon,  target_end_date) %>% #Add count of locations
+    mutate(n_locations = n_distinct(location)) %>%
+    dplyr::filter(n_locations==n_locs) %>%
+    ungroup()  %>%
+    group_by(model, location, target_end_date) %>% #Add count of weeks
+    dplyr::mutate(n_horizons = n_distinct(horizon)) %>%
+    dplyr::filter(n_horizons==max(n_horizons)) %>%
+    ungroup() %>%
+    group_by(model, horizon, location) %>%
+    mutate(n_dates = n_distinct(target_end_date)) %>%
+    dplyr::filter(n_dates==max(n_dates)) %>%
+    ungroup() %>%
+    dplyr::select(-c("n_horizons","n_locations","n_dates"))
+  # final clean-up
+  matrix_frame <- formatted_frame %>%
+    dplyr::select("location","target_variable","target_end_date",
+                  "type","quantile","model","value","horizon") %>%
+    dplyr::arrange(location,horizon,target_variable,target_end_date,model,quantile) %>%
+    tidyr::pivot_wider(names_from = model, values_from = value) %>%
+    dplyr::select_if(~ !any(is.na(.)))
+  return(matrix_frame)
+} 
+  
+## a function that takes a data frame with single target-location and calculates CvM for pairwise combinations
+## this returns a matrix of CvM for the models for a single target-location
+
+cd_combination <- function(single_tarloc_frame,approx_rule, tau_F,tau_G){
+  # remove any models with NA for values for this target location (assuming all models have the same quantiles)
+  single_tarloc<- single_tarloc_frame[ , colSums(is.na(single_tarloc_frame)) == 0]
+  # pairwise column calculation
+  tmp <- single_tarloc %>%
+    dplyr::select(-c("target_variable","target_end_date","location","type","quantile","horizon"))
+  nc <- ncol(tmp)
+  cnames <- colnames(tmp)
+  eg <- expand.grid(1:nc, 1:nc)
+  nr <- nrow(eg)
+  v <- vector(length=nr)
+  for (i in 1:nr) {
+    cc <- calc_cramers_dist_one_model_pair(as.numeric(unlist(tmp[,eg[i,1]])),
+                                           tau_F,
+                                           as.numeric(unlist(tmp[,eg[i,2]])),
+                                           tau_G,
+                                           approx_rule)
+    v[i] <- cc
+  }
+  single_tarloc_cvm <- data.frame(model_1=rep(cnames,nc),
+                                  model_2=rep(cnames,each=nc),
+                                  approx_cd=v)
+  return(single_tarloc_cvm)
+}
+
+
+
+## A wrapper to create a list of data frame for each target-location combination
+### by filter on target and location
+build_distance_frame <- function(model_dataframe, horizon_list,target_list, approx_rule,tau_F,tau_G){
+  library(tidyverse)
+  library(tidyr)
+  # remove point estimates and forecast_date
+  main_frame <- model_dataframe %>% 
+      dplyr::mutate(horizon = as.numeric(as.character(horizon)),
+                    target_variable = as.character(target_variable),
+                    location = as.character(location), 
+                    target_end_date = as.Date(target_end_date)) %>%
+      dplyr::filter(target_variable %in% target_list,
+                    horizon %in% horizon_list) 
+  if("forecast_date" %in% c(colnames(main_frame))){
+    main_frame <- main_frame %>%
+      dplyr::select(-"forecast_date")
+  }
+  ## apply distance_combination function 
+  locations <- unique(main_frame$location)
+  dist_frame <- data.frame()
+  for(loc in locations){
+      for(target in target_list){
+        for(horiz in horizon_list){
+          tar_loc <- main_frame %>%
+            dplyr::filter(location==loc,
+                          target_variable==target,
+                          horizon==horiz) 
+          end_dates <- unique(tar_loc$target_end_date)
+          for(end_date in end_dates){
+            single_matrix <- tar_loc %>%
+              dplyr::filter(target_end_date==end_date) %>%
+              dplyr::arrange(quantile) %>%
+              cd_combination(., approx_rule, tau_F,tau_G) %>%
+              dplyr::mutate(horizon=horiz,
+                            location=loc,
+                            target_variable=target,
+                            target_end_date=end_date)
+            rbind(dist_frame,single_matrix) -> dist_frame
+          }
+        }
+      }
+  }
+  # calculate mean distance
+  mean_frame <- dist_frame %>%
+    dplyr::select(-"target_end_date") %>%
+    dplyr::group_by(horizon,location,target_variable,model_1,model_2) %>%
+    dplyr::mutate(mean_dis=mean(approx_cd)) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(-"approx_cd") %>%
+    dplyr::arrange(factor(model_2, levels = unique(model_2))) %>%
+    distinct()
+  # median_frame <- dist_frame %>%
+  #   dplyr::select(-"target_end_date") %>%
+  #   dplyr::group_by(horizon,location,target_variable,model_1,model_2) %>%
+  #   dplyr::mutate(mean_dis=median(approx_cd)) %>%
+  #   dplyr::ungroup() %>%
+  #   dplyr::select(-"approx_cd") %>%
+  #   dplyr::arrange(factor(model_2, levels = unique(model_2))) %>%
+  #   distinct()
+  return(list(full_dataframe=dist_frame,mean_dataframe=mean_frame))
+}
+
+# create matrix
+cd_matrix <- function(mean_cd_frame, h){
+# cd_matrix <- function(mean_cd_frame, h, target){
+  # pairwise column calculation
+  # arrange by largest average of mean dis compared to all forecasts
+  tmp <-mean_cd_frame %>% 
+    # dplyr::filter(horizon==h,target_variable==target) %>%
+    dplyr::filter(horizon==as.numeric(h)) %>%
+    # dplyr::group_by(horizon,target_variable,model_1) %>%
+    dplyr::group_by(horizon,model_1) %>%
+    dplyr::mutate(dist_ens = mean_approx_cd[model_2=="COVIDhub-ensemble"]) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(desc(dist_ens)) 
+  nc <- length(unique(tmp$model_1))
+  if((nc^2 != nrow(tmp))){
+    stop(paste0("cannot create a square matrix - check filtering for ",h,"-",target))
+  } 
+  ord <-  tmp$model_1[(1:nrow(tmp) %% nc)==1]
+  mean_cd <- matrix(NA,nc,nc)
+  for(i in 1:nc){
+    for(j in 1:nc){
+      mean_cd[i,j] <- tmp$mean_approx_cd[which(tmp$model_1==ord[i] & tmp$model_2==ord[j])]
+    }
+  }
+  dimnames(mean_cd) <- list(ord,ord)
+  return(mean_cd)
+}
+
+# a function that takes a matrix and plot a heatmap
+# distance_heatmap <- function(sum_dist,h,target,name){
+distance_heatmap <- function(sum_dist,h,name){
+  dat <- sum_dist %>% 
+    # dplyr::filter(horizon==h,target_variable==target) %>%
+    dplyr::filter(horizon==h) %>%
+    dplyr::group_by(horizon,model_1) %>%
+    # dplyr::group_by(horizon,target_variable,model_1) %>%
+    dplyr::mutate(dist_ens = mean_approx_cd[model_2=="COVIDhub-ensemble"]) %>%
+    dplyr::ungroup() %>%
+    dplyr::arrange(desc(dist_ens))
+  nc <- length(unique(dat$model_1))
+  ord <-  dat$model_1[(1:nrow(dat) %% nc)==1]
+  ggplot(dat, aes(factor(model_1, levels=ord), 
+                  factor(model_2, levels=ord), 
+                  fill= mean_approx_cd)) + 
+    geom_tile() +
+    theme(axis.text.x=element_text(size=rel(0.8),angle=45,hjust=1),
+          axis.text.y=element_text(size=rel(0.8)))+
+    labs(title=name)+
+    xlab("") +
+    ylab("") +
+    scale_fill_distiller(palette = "YlOrRd",direction=+1,name="distance") +
+    theme(plot.title = element_text(size=7),
+          legend.title = element_text(size=4),
+          legend.key.size = unit(0.3, 'cm'),
+          legend.text = element_text(size=4),
+          plot.margin=unit(c(0,0,0,0),"cm"))
+    # geom_text(aes(label=round(cvm,2))) 
+}
+
+
+sym_mat <- function(X){
+  ind1 <- apply(X, 1, function(x) any(is.na(x)))
+  ind2 <- apply(X, 2, function(x) any(is.na(x)))
+  X_sym <- X[ !ind1, !ind2 ]
+  return(as.dist(X_sym))
+}
