@@ -18,7 +18,6 @@ output:
 
 ```{r setup, include=FALSE}
 library(tidyverse)
-library(energy)
 library(knitr)
 library(data.table)
 library(covidHubUtils)
@@ -33,13 +32,9 @@ knitr::opts_chunk$set(echo=FALSE,
                        fig.align = 'center')
 ```
 
-
 # COVID-19 Death Count Forecasting Models' Metadata
 
 ```{r}
-source("./functions/metadata_functions.R")
-source("./functions/distance_func_script.R")
-
 # set targets for analysis
 target_horizon <- 1:4
 target_var <- c("inc death","inc case")
@@ -54,18 +49,14 @@ rm(wide_frame_death,d_frame)
 metadata_list <- sapply(death_model_list,
                         function(x)
                         list.files("./data/metadata")[grepl(x,list.files("./data/metadata"))])
+
+##-------- change this to only pull table and filter----------#
 # start processing
 full_list_death <- map_dfr(metadata_list, 
                            function(x) {
                              make_metadata_table(paste0("./data/metadata/",x))
                            })
 
-# check
-full_list <- list.files("./data/metadata")
-full_list_death <- map_dfr(full_list, 
-                           function(x) {
-                             make_metadata_table(paste0("./data/metadata/",x))
-                           })
 # extract
 # check <- extract_data(full_list_death)
 ```

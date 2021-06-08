@@ -62,11 +62,20 @@ make_metadata_table <- function(path) {
   return(final_frame)
 }
 
-# extract_data <- function(frame){
-#   main <- frame[,1:3]
-#   # not NA
-#   if(mehtods_long )
-#   main$bayesian <- ifelse((grepl("bayes",tolower(main$model_name)))|(grepl("bayes",tolower(main$methods)))|(grepl("bayes",tolower(main$methods_long))),TRUE,FALSE)
-#   main$intervention <- ifelse((grepl("intervention",tolower(main$methods)))|(grepl("intervention",tolower(main$methods_long)))|(grepl("policy",tolower(main$methods_long)))|(grepl("policy",tolower(main$methods_long))),TRUE,FALSE)
-#   return(main)
-# }
+extract_data <- function(frame){
+  main <- frame[,1:3]
+  # check for Bayesian
+  bayes.c <- "bayes|bayesian"
+  main$bayesian <- ifelse((grepl(bayes.c,tolower(main$model_name)))|
+                            (grepl(bayes.c,tolower(main$methods)))|
+                            (grepl(bayes.c,tolower(main$methods_long))),
+                          TRUE,FALSE)
+  # check for intervention
+  int.c <- ""
+  main$intervention <- ifelse((grepl(int.c,tolower(main$methods)))|
+                                (grepl(int.c,tolower(main$methods_long))),
+                              TRUE,FALSE)
+  # check for machine learning
+  # check for
+  return(main)
+}

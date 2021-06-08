@@ -148,6 +148,9 @@ death_truth <- load_truth("JHU",
 dlocs <- death_truth %>%
   dplyr::filter(location < 60) %>% 
   slice_min(n=5, order_by = value)
+dlocs <- dlocs$location
+
+
   
 # do the same for cases
 cases_truth <- load_truth("JHU", 
@@ -164,7 +167,8 @@ cases_truth <- load_truth("JHU",
 clocs <- cases_truth %>%
   dplyr::filter(location < 60) %>% 
   slice_min(n=5, order_by = value)
-  
+clocs <- clocs$location
+
 # run to build
   for(i in 1:4){
     assign(paste0("quantile_frame",i),
