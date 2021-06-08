@@ -63,19 +63,91 @@ make_metadata_table <- function(path) {
 }
 
 extract_data <- function(frame){
-  main <- frame[,1:3]
+  # method check
   # check for Bayesian
   bayes.c <- "bayes|bayesian"
-  main$bayesian <- ifelse((grepl(bayes.c,tolower(main$model_name)))|
-                            (grepl(bayes.c,tolower(main$methods)))|
-                            (grepl(bayes.c,tolower(main$methods_long))),
-                          TRUE,FALSE)
   # check for intervention
-  int.c <- ""
-  main$intervention <- ifelse((grepl(int.c,tolower(main$methods)))|
-                                (grepl(int.c,tolower(main$methods_long))),
-                              TRUE,FALSE)
+  int.c <- "intervention|compliance|social distanc|policy"
   # check for machine learning
-  # check for
+  ml.c <- "neural network|random forecast|learning"
+  # check for compartmental 
+  compart.c <- "sir|seir|compartmental"
+  # check for spatio
+  spatio.c <- "spatio"
+  # agent based
+  agent.c <- "agent"
+  # ensemble or not
+  ensemble.c <- "ensemble|pool|pooling"
+  # human expert or not
+  hexpert.c <- "experts|crowdsourc"
+  # time series or not
+  ts.c <- "time series|arima|sarima|arma"
+  # data check
+  # JHU cases/deaths
+  jhu.c <- "jhu"
+  # NYTimes cases/deaths
+  nyt.c <- "nytimes|new york times"
+  # usa facts for data
+  usaf.c <- "usafacts|usa facts"
+  # check for mobility data
+  mobil.c <- "mobility|gps|gis|tracking"
+  # demographic data (for in methods and data)
+  demog.c <- "demographic|socioeconomic|age|demography"
+  # implement checks
+  main <- frame %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(bayesian=  ifelse((grepl(bayes.c,tolower(model_name)))|
+                                      (grepl(bayes.c,tolower(methods)))|
+                                      (grepl(bayes.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  # add NA check
+                  na_input= is.na(data_inputs),
+                  intervention=  ifelse((grepl(int.c,tolower(model_name)))|
+                                      (grepl(int.c,tolower(methods)))|
+                                      (grepl(int.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  machine_learning=  ifelse((grepl(ml.c,tolower(model_name)))|
+                                      (grepl(ml.c,tolower(methods)))|
+                                      (grepl(ml.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  compartmental=  ifelse((grepl(compart.c,tolower(model_name)))|
+                                      (grepl(compart.c,tolower(methods)))|
+                                      (grepl(compart.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  spatio=  ifelse((grepl(spatio.c,tolower(model_name)))|
+                                      (grepl(spatio.c,tolower(methods)))|
+                                      (grepl(spatio.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  agent_based=  ifelse((grepl(agent.c,tolower(model_name)))|
+                                      (grepl(agent.c,tolower(methods)))|
+                                      (grepl(agent.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  ensemble=  ifelse((grepl(ensemble.c,tolower(model_name)))|
+                                      (grepl(ensemble.c,tolower(methods)))|
+                                      (grepl(ensemble.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  human_expert=  ifelse((grepl(hexpert.c,tolower(model_name)))|
+                                      (grepl(hexpert.c,tolower(methods)))|
+                                      (grepl(hexpert.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  time_series=  ifelse((grepl(ts.c,tolower(model_name)))|
+                                      (grepl(ts.c,tolower(methods)))|
+                                      (grepl(ts.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  JHU_data=  ifelse((grepl(jhu.c,tolower(data_inputs))),
+                                    TRUE,FALSE),
+                  NYTimes_data=  ifelse((grepl(nyt.c,tolower(data_inputs))),
+                                    TRUE,FALSE),
+                  USAfacts_data=  ifelse((grepl(usaf.c,tolower(data_inputs))),
+                                    TRUE,FALSE),
+                  mobility_data=  ifelse((grepl(mobil.c,tolower(data_inputs)))|
+                                      (grepl(mobil.c,tolower(methods)))|
+                                      (grepl(mobil.c,tolower(methods_long))),
+                                    TRUE,FALSE),
+                  demography=  ifelse((grepl(demog.c,tolower(data_inputs)))|
+                                      (grepl(demog.c,tolower(methods)))|
+                                      (grepl(demog.c,tolower(methods_long))),
+                                    TRUE,FALSE)
+                  )
   return(main)
 }
