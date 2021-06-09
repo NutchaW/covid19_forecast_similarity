@@ -5,7 +5,6 @@ library(lubridate)
 library(zoltr)
 
 # build metadata table
-
 source("./functions/metadata_functions.R")
 source("./functions/distance_func_script.R")
 
@@ -17,3 +16,5 @@ full_list_death <- map_dfr(full_list,
                            })
 
 # extract
+categorized_frame <- extract_data(full_list_death)
+write.csv(categorized_frame,"./metadata_categorized.csv",row.names = FALSE)
