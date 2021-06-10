@@ -138,7 +138,7 @@ cd_matrix <- function(mean_cd_frame, h){
     dplyr::filter(horizon==as.numeric(h)) %>%
     # dplyr::group_by(horizon,target_variable,model_1) %>%
     dplyr::group_by(horizon,model_1) %>%
-    dplyr::mutate(dist_ens = mean_approx_cd[model_2=="COVIDhub-ensemble"]) %>%
+    dplyr::mutate(dist_ens = mean_dis[model_2=="COVIDhub-ensemble"]) %>%
     dplyr::ungroup() %>%
     dplyr::arrange(desc(dist_ens)) 
   nc <- length(unique(tmp$model_1))
@@ -149,7 +149,7 @@ cd_matrix <- function(mean_cd_frame, h){
   mean_cd <- matrix(NA,nc,nc)
   for(i in 1:nc){
     for(j in 1:nc){
-      mean_cd[i,j] <- tmp$mean_approx_cd[which(tmp$model_1==ord[i] & tmp$model_2==ord[j])]
+      mean_cd[i,j] <- tmp$mean_dis[which(tmp$model_1==ord[i] & tmp$model_2==ord[j])]
     }
   }
   dimnames(mean_cd) <- list(ord,ord)
@@ -158,35 +158,46 @@ cd_matrix <- function(mean_cd_frame, h){
 
 # a function that takes a matrix and plot a heatmap
 # distance_heatmap <- function(sum_dist,h,target,name){
-distance_heatmap <- function(sum_dist,h,name){
-  dat <- sum_dist %>% 
-    # dplyr::filter(horizon==h,target_variable==target) %>%
-    dplyr::filter(horizon==h) %>%
-    dplyr::group_by(horizon,model_1) %>%
-    # dplyr::group_by(horizon,target_variable,model_1) %>%
-    dplyr::mutate(dist_ens = mean_approx_cd[model_2=="COVIDhub-ensemble"]) %>%
+distance_heatmap <- function(sum_dist,name,order_list){
+  tmp <- sum_dist %>%
+    dplyr::group_by(model_1,model_2) %>%
+    dplyr::mutate(ov_mean=mean(mean_dis)) %>%
     dplyr::ungroup() %>%
-    dplyr::arrange(desc(dist_ens))
-  nc <- length(unique(dat$model_1))
-  ord <-  dat$model_1[(1:nrow(dat) %% nc)==1]
-  ggplot(dat, aes(factor(model_1, levels=ord), 
-                  factor(model_2, levels=ord), 
-                  fill= mean_approx_cd)) + 
-    geom_tile() +
-    theme(axis.text.x=element_text(size=rel(0.8),angle=45,hjust=1),
-          axis.text.y=element_text(size=rel(0.8)))+
+    dplyr::select(-"mean_dis") %>%
+    dplyr::distinct(.,.keep_all = TRUE) %>%
+    dplyr::arrange(desc(ov_mean))
+  order_list <- unique(tmp$model_1)
+  # arrange by mean dist closest to ensemble
+  ggplot(sum_dist, aes(factor(model_1,levels=order_list),
+                       factor(model_2,levels=order_list))) +
+    geom_tile(aes(fill= mean_dis)) +
+    facet_wrap(~horizon) +
+    theme(axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+          axis.text.y=element_text(size=rel(0.7)))+
     labs(title=name)+
     xlab("") +
     ylab("") +
     scale_fill_distiller(palette = "YlOrRd",direction=+1,name="distance") +
-    theme(plot.title = element_text(size=7),
-          legend.title = element_text(size=4),
+    theme(plot.title = element_text(size=8),
+          legend.title = element_text(size=5),
           legend.key.size = unit(0.3, 'cm'),
           legend.text = element_text(size=4),
           plot.margin=unit(c(0,0,0,0),"cm"))
-    # geom_text(aes(label=round(cvm,2))) 
 }
 
+scatter <-  function(data,title_name){
+  dat <- data %>% 
+    dplyr::mutate(Model=model_2) 
+  ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model)) + 
+    geom_point(alpha=0.6,size=0.5) + 
+    geom_line(alpha=0.4) +
+    ggtitle(title_name) +
+    ylab("Approx. CD") +
+    xlab("Forecast  End Date") +
+    facet_wrap(vars(horizon), nrow = 2,scales = "free") +
+    theme(legend.text = element_text(size=5),
+          legend.title = element_text(size=7))
+}
 
 sym_mat <- function(X){
   ind1 <- apply(X, 1, function(x) any(is.na(x)))
@@ -194,3 +205,4 @@ sym_mat <- function(X){
   X_sym <- X[ !ind1, !ind2 ]
   return(as.dist(X_sym))
 }
+
