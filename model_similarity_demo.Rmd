@@ -225,7 +225,7 @@ for(loc in 1:5){
 }
 ```
 
-Below are the heatmaps of mean approximated pairwise CD across time by location-target:
+Below are the heat maps of mean approximated pairwise CD across time by location-target:
 
 ```{r,fig.align='center'}
 grid.arrange(p_61, p_62,p_63, p_64, 

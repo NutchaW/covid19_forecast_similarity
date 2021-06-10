@@ -1,69 +1,53 @@
-# function to process one file path
-# get_metadata_table <- function(file_path, sep, fill, header) {
-#   sep = ":"
-#   fill = TRUE
-#   header = FALSE
-#   
-#   table <- read.table(file = file_path, sep = sep, quote="",fill = fill, header = header)
-#   
-#   table <- table %>% 
-#     mutate_all(list(~na_if(., ""))) %>%
-#     unite("N", `V2`:`V3`, na.rm = TRUE, remove = FALSE) %>%
-#     select(`V1`, `N`)
-#   
-#   col_names <- tibble(V1 = c("team_name", 
-#                              "model_name", 
-#                              "model_abbr", 
-#                              "model_contributors", 
-#                              "website_url", 
-#                              "license", 
-#                              "team_model_designation", 
-#                              "methods",
-#                              "institutional_affil",
-#                              "team_funding",
-#                              "repo_url",
-#                              "twitter_handles",
-#                              "data_inputs",
-#                              "citation",
-#                              "methods_long"))
-#   
-#   table <- as_tibble(table)
-#   table <- full_join(col_names, table, by = "V1")
-#   table <- t(table)
-#   table <- as_tibble(table)
-#   table <- filter(table, `V1` != "team_name")
-#   
-# }
+get_model_metadata <- function(models, hub_repo_path) {
+  if (missing(hub_repo_path)){
+    stop ("Error in get_model_designations: Please provide a hub_repo_path")
+  } else {
+    model_metadata_paths = paste0('data-processed/',models,'/metadata-',models,'.txt')
+    
+    model_info <- purrr::map_dfr(
+      model_metadata_paths,
+      function (model_metadata_path){
+        commits_command <- paste0("cd ",hub_repo_path,
+                                  "; git log --date=unix --follow -- ",
+                                  model_metadata_path)
+        # invoke command and parse result
+        all_commits <- system(commits_command,intern = TRUE) %>%
+          stringr::str_split_fixed(" ", 2) %>%
+          as.data.frame() %>%
+          dplyr::rename(info1 = V1, info2 = V2)
+        recent_commit_sha <- all_commits$info2[all_commits$info1=="commit"]
 
-make_metadata_table <- function(path) {
-  line_dat <- suppressWarnings(readLines(path)) %>%
-    sub("^\\s+", "", .)
-  tmp <- data.frame(str_match(line_dat,"((\\w+):|(\\s+))\\s*(.+)")[,c(3,5)]) %>%
-    .[rowSums(is.na(.))<ncol(.),]
-  for(i in rev(2:nrow(tmp))){
-    if(is.na(tmp$X1[i])) {
-      tmp$X2[i-1] <- paste0(tmp$X2[i-1],tmp$X2[i]) 
-    }}
-  frame <- na.omit(tmp) %>% 
-    tidyr::pivot_wider(names_from = X1, values_from = X2)
-  col_info <- c("team_name","model_name","model_abbr","methods","data_inputs","methods_long")
-  cnames <- setdiff(col_info,colnames(frame))
-  if(length(cnames)==0){
-    final_frame <- frame %>%
-      dplyr::select(col_info) %>%
-      .[c(col_info)]
-    } else {
-    na.frame <- data.frame(matrix(rep(NA,length(cnames)),ncol=2))
-    names(na.frame) <- cnames
-    final_frame <- frame %>%
-      dplyr::select(col_info[!col_info %in% grep(paste0(cnames, collapse = "|"), col_info, value = T)])
-    final_frame <- cbind(final_frame,na.frame)[col_info]
+        # construct git command to read metadata file
+        read_command_all <- paste0("cd ",hub_repo_path,"; git show ",
+                               recent_commit_sha,":./",model_metadata_path)
+        # check if file exists in commit
+        check_command_list <- paste0("cd ",hub_repo_path,"; git show ",
+                                     recent_commit_sha,":",model_metadata_path," > /dev/null 2>&1")
+        exit_code <- sapply(check_command_list, function(command_line) system(command_line))
+        read_command <- read_command_all[which(exit_code==0)]
+        purrr::map_dfr(read_command,
+                       function(x) {
+                         string_clean <- system(x, intern = TRUE)
+                         if(class(try(yaml::yaml.load(string_clean),silent=TRUE))!="try-error" &&
+                            grepl("team_name",paste(string_clean,collapse=" ")) &&
+                            grepl("model_name",paste(string_clean,collapse=" ")) &&
+                            grepl("model_abbr",paste(string_clean,collapse=" "))){
+                           metadata_list <- yaml::yaml.load(string_clean)
+                           metadata_list[c(which(sapply(metadata_list,function(y) is.null(y))==TRUE))] <- NA
+                           as.data.frame(metadata_list,stringsAsFactors = FALSE)  %>%
+                              dplyr::mutate(date = as.POSIXct(as.numeric(all_commits$info2[all_commits$info1=="Date:"][
+                                which(read_command==x)]), origin="1970-01-01")) %>%
+                              tidyr::gather(attribute, value, -c(team_name, model_name,model_abbr,date))
+                         }
+                       }
+          )
+      })
   }
-  return(final_frame)
+  return(model_info)
 }
 
-extract_data <- function(frame){
-  # method check
+
+make_metadata_table <- function(frame,summarizing=FALSE) {
   # check for Bayesian
   bayes.c <- "bayes|bayesian"
   # check for intervention
@@ -73,7 +57,7 @@ extract_data <- function(frame){
   # check for compartmental 
   compart.c <- "sir|seir|compartmental"
   # check for spatio
-  spatio.c <- "spatio"
+  spatial.c <- "spatio|spatial"
   # agent based
   agent.c <- "agent"
   # ensemble or not
@@ -84,17 +68,27 @@ extract_data <- function(frame){
   ts.c <- "time series|arima|sarima|arma"
   # data check
   # JHU cases/deaths
-  jhu.c <- "jhu"
+  jhu.c <- "jhu|john hopkins"
   # NYTimes cases/deaths
   nyt.c <- "nytimes|new york times"
+  # covid tracking
+  covidtracking.com.c <- "covidtracking"
   # usa facts for data
   usaf.c <- "usafacts|usa facts"
   # check for mobility data
   mobil.c <- "mobility|gps|gis|tracking"
   # demographic data (for in methods and data)
   demog.c <- "demographic|socioeconomic|age|demography"
-  # implement checks
-  main <- frame %>%
+  # statistical
+  stats.c <- "gams|regression|arma|arima|splines"
+  final_frame <- frame %>%
+    dplyr::filter(attribute %in% 
+                    c("data_inputs","methods","methods_long")) %>%
+    dplyr::distinct(.,.keep_all = TRUE) %>%
+    group_by(model_name,team_name,model_abbr,date)%>%
+    tidyr::pivot_wider(names_from=attribute,values_from=value) 
+  if(summarizing==TRUE){
+    final_frame <- final_frame %>%
     dplyr::rowwise() %>%
     dplyr::mutate(bayesian=  ifelse((grepl(bayes.c,tolower(model_name)))|
                                       (grepl(bayes.c,tolower(methods)))|
@@ -103,51 +97,53 @@ extract_data <- function(frame){
                   # add NA check
                   na_input= is.na(data_inputs),
                   intervention=  ifelse((grepl(int.c,tolower(model_name)))|
-                                      (grepl(int.c,tolower(methods)))|
-                                      (grepl(int.c,tolower(methods_long))),
-                                    TRUE,FALSE),
+                                          (grepl(int.c,tolower(methods)))|
+                                          (grepl(int.c,tolower(methods_long))),
+                                        TRUE,FALSE),
                   machine_learning=  ifelse((grepl(ml.c,tolower(model_name)))|
-                                      (grepl(ml.c,tolower(methods)))|
-                                      (grepl(ml.c,tolower(methods_long))),
-                                    TRUE,FALSE),
+                                              (grepl(ml.c,tolower(methods)))|
+                                              (grepl(ml.c,tolower(methods_long))),
+                                            TRUE,FALSE),
                   compartmental=  ifelse((grepl(compart.c,tolower(model_name)))|
-                                      (grepl(compart.c,tolower(methods)))|
-                                      (grepl(compart.c,tolower(methods_long))),
-                                    TRUE,FALSE),
-                  spatio=  ifelse((grepl(spatio.c,tolower(model_name)))|
-                                      (grepl(spatio.c,tolower(methods)))|
-                                      (grepl(spatio.c,tolower(methods_long))),
-                                    TRUE,FALSE),
+                                           (grepl(compart.c,tolower(methods)))|
+                                           (grepl(compart.c,tolower(methods_long))),
+                                         TRUE,FALSE),
                   agent_based=  ifelse((grepl(agent.c,tolower(model_name)))|
-                                      (grepl(agent.c,tolower(methods)))|
-                                      (grepl(agent.c,tolower(methods_long))),
-                                    TRUE,FALSE),
+                                         (grepl(agent.c,tolower(methods)))|
+                                         (grepl(agent.c,tolower(methods_long))),
+                                       TRUE,FALSE),
                   ensemble=  ifelse((grepl(ensemble.c,tolower(model_name)))|
                                       (grepl(ensemble.c,tolower(methods)))|
                                       (grepl(ensemble.c,tolower(methods_long))),
                                     TRUE,FALSE),
                   human_expert=  ifelse((grepl(hexpert.c,tolower(model_name)))|
-                                      (grepl(hexpert.c,tolower(methods)))|
-                                      (grepl(hexpert.c,tolower(methods_long))),
-                                    TRUE,FALSE),
+                                          (grepl(hexpert.c,tolower(methods)))|
+                                          (grepl(hexpert.c,tolower(methods_long))),
+                                        TRUE,FALSE),
                   time_series=  ifelse((grepl(ts.c,tolower(model_name)))|
-                                      (grepl(ts.c,tolower(methods)))|
-                                      (grepl(ts.c,tolower(methods_long))),
-                                    TRUE,FALSE),
+                                         (grepl(ts.c,tolower(methods)))|
+                                         (grepl(ts.c,tolower(methods_long))),
+                                       TRUE,FALSE),
                   JHU_data=  ifelse((grepl(jhu.c,tolower(data_inputs))),
                                     TRUE,FALSE),
                   NYTimes_data=  ifelse((grepl(nyt.c,tolower(data_inputs))),
-                                    TRUE,FALSE),
+                                        TRUE,FALSE),
+                  covidtracking.com_data=  ifelse((grepl(covidtracking.com.c,tolower(data_inputs))),
+                                                  TRUE,FALSE),
                   USAfacts_data=  ifelse((grepl(usaf.c,tolower(data_inputs))),
-                                    TRUE,FALSE),
-                  mobility_data=  ifelse((grepl(mobil.c,tolower(data_inputs)))|
-                                      (grepl(mobil.c,tolower(methods)))|
-                                      (grepl(mobil.c,tolower(methods_long))),
-                                    TRUE,FALSE),
+                                         TRUE,FALSE),
+                  mobility_data=  ifelse((grepl(mobil.c,tolower(methods)))|
+                                           (grepl(mobil.c,tolower(methods_long))),
+                                         TRUE,FALSE),
                   demography=  ifelse((grepl(demog.c,tolower(data_inputs)))|
-                                      (grepl(demog.c,tolower(methods)))|
-                                      (grepl(demog.c,tolower(methods_long))),
-                                    TRUE,FALSE)
-                  )
-  return(main)
+                                        (grepl(demog.c,tolower(methods)))|
+                                        (grepl(demog.c,tolower(methods_long))),
+                                      TRUE,FALSE),
+                  stats=  ifelse((grepl(stats.c,tolower(data_inputs)))|
+                                   (grepl(stats.c,tolower(methods)))|
+                                   (grepl(stats.c,tolower(methods_long))),
+                                 TRUE,FALSE))
+  }
+  return(final_frame)
 }
+
