@@ -176,7 +176,7 @@ clocs <- clocs$location
                    function(fdates) {
                      covidHubUtils::load_latest_forecasts(last_forecast_date = fdates,
                                                           forecast_date_window_size=6,
-                                                          locations = dlocs$location,
+                                                          locations = dlocs,
                                                           types = "quantile",
                                                           targets = target_list[i],
                                                           source = "zoltar")})
@@ -184,7 +184,7 @@ clocs <- clocs$location
   }
 
 
-  # write large files
+# write large files
 write_csv(rbind(quantile_frame1,
                 quantile_frame2,
                 quantile_frame3,
