@@ -34,7 +34,7 @@ knitr::opts_chunk$set(echo=FALSE,
 ```
 
 
-# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Death 
+# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Death (top 5) 
 
 The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 deaths of at least 20,000 by the end of February 2021, all probability levels, from mid-October 2020 until May 24th, 2021 .
 
@@ -160,7 +160,8 @@ for(i in 1:4){
 ```
 
 
-# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Case
+
+# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Case (top 5) 
 
 The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all probability levels, from mid-October 2020 until May 24th,2021 for 5 locations with the highest incident cases in the week of February 27, 2021.
 
@@ -225,7 +226,7 @@ for(loc in 1:5){
 }
 ```
 
-Below are the heat maps of mean approximated pairwise CD across time by location-target:
+Below are the heatmaps of mean approximated pairwise CD across time by location-target:
 
 ```{r,fig.align='center'}
 grid.arrange(p_61, p_62,p_63, p_64, 
@@ -271,3 +272,238 @@ for(i in 1:4){
 }
 ```
 
+
+
+
+# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Death (bottom 5)  locations
+
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the lowest number of COVID-19 deaths of at least 20,000 by the end of February 2021, all probability levels, from mid-October 2020 until May 24th, 2021 .
+
+```{r}
+source("./functions/distance_func_script.R")
+# create sample data for this demo
+# each target will have different sets of models based on the current filtering
+wide_frame_death <- read.csv("./data/quantile_frame_bottom.csv") 
+wide_frame_case <- read.csv("./data/quantile_frame_inc_bottom.csv") 
+d_frame <- frame_format(wide_frame_death) 
+c_frame <- frame_format(wide_frame_case) 
+```
+
+```{r}
+# death forecast
+# calculate distance matrices
+q_set <- unique(d_frame$quantile) 
+approx_cd_list <- build_distance_frame(d_frame, 
+                           horizon_list=c(1:4),
+                           target_list="inc death",
+                           approx_rule="trapezoid_riemann",
+                           tau_F=q_set,tau_G=q_set)
+
+# extract list[1] by location and take the mean
+for(loc in unique(approx_cd_list[[1]]$location)){
+  tmp <- approx_cd_list[[1]] %>% 
+    dplyr::filter(location==loc) %>%
+    dplyr::group_by(location,model_1,model_2,horizon) %>%
+    dplyr::mutate(mean_approx_cd=mean(approx_cd)) %>% 
+    ungroup() %>%
+    dplyr::select(-c("approx_cd","target_end_date")) %>%
+    distinct()
+  tmp2 <- lapply(1:4, function(x) cd_matrix(tmp,x))
+  assign(paste0("d_mm_frame_",loc), tmp)
+  assign(paste0("d_frame_loc",loc), tmp2)
+}
+
+# leave as is and plot how differences change over time too (pick a few?) 
+total_frame <- approx_cd_list[[1]] %>%
+  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs "))
+total_frame$target_end_date <- as.Date(total_frame$target_end_date,origin="1970-01-01")
+# get location 
+locs <- unique(approx_cd_list[[1]]$location)
+loc_name <-  unique(wide_frame_death$abbreviation)
+# plot heatmaps
+for(loc in 1:5){
+  for(i in 1:4){
+    tmp <- get(paste0("d_mm_frame_",locs[loc]))
+    assign(paste0("p_",locs[loc],i),
+      distance_heatmap(tmp,i,
+                         paste0(loc_name[loc], "- Mean Approx. CD - \n",i," wk Ahead Inc Death")))
+  }
+}
+# scatterplot
+for(loc in 1:5){
+  tmp <-total_frame %>%
+          dplyr::filter(location==locs[loc]) %>%
+          dplyr::group_by(horizon,target_end_date) %>%
+          # dplyr::filter(model_1 != model_2,
+          #               pair %in% n_list) %>%
+          dplyr::filter(model_1 =="COVIDhub-ensemble",
+                        model_2 != "COVIDhub-ensemble") %>%
+          dplyr:: ungroup()
+  assign(paste0("t_",loc),
+    ggplot(tmp, aes(x=target_end_date, y=approx_cd,col=pair)) + 
+    geom_point(alpha=0.6) + 
+    geom_line(alpha=0.4) +
+    ylab(paste0("Approx CD from Baseline Over Time  - ",loc_name[loc])) +
+    facet_wrap(vars(horizon), nrow = 2) +
+    theme(legend.text = element_text(size=6)))
+}
+```
+
+We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
+
+```{r,fig.align='center'}
+grid.arrange(p_21, p_22,p_23, p_24, 
+             ncol=2)
+grid.arrange(p_151, p_152,p_153, p_154, 
+             ncol=2)
+grid.arrange(p_231, p_232,p_233, p_234, 
+             ncol=2)
+grid.arrange(p_501, p_502,p_503, p_504, 
+             ncol=2)
+grid.arrange(p_561, p_562,p_563, p_564, 
+             ncol=2)
+```
+
+We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
+
+```{r,fig.align='center'}
+t_1
+t_2
+t_3
+t_4
+t_5
+```
+
+We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
+
+```{r}
+library(ggdendro)
+for(j in 1:5){
+for(i in 1:4){
+    assign(paste0("dp_",i),
+    ggdendrogram(
+      hclust(as.dist(get(paste0("d_frame_loc",locs[j]))[[i]]), method = "ward.D", members = NULL)
+      ,size = 2) +
+      labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name[j]))+
+      xlab("") +
+      ylab("Mean Cramer's Distance") +
+      theme(axis.text.x = element_text(size=5),
+            axis.text.y = element_text(size=7),
+            plot.margin=unit(c(0,0,0,0),"cm"),
+            plot.title = element_text(size=8)))
+  } 
+  grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
+}
+```
+
+
+# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Case (bottom 5)
+
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all probability levels, from mid-October 2020 until May 24th,2021 for 5 locations with the lowest incident cases in the week of February 27, 2021.
+
+```{r}
+# calculate distance matrices
+q_set <- unique(c_frame$quantile) 
+approx_cd_list <- build_distance_frame(c_frame, 
+                           horizon_list=c(1:4),
+                           target_list="inc case",
+                           approx_rule="trapezoid_riemann",
+                           tau_F=q_set,tau_G=q_set)
+
+# extract list[1] by location and take the mean
+for(loc in unique(approx_cd_list[[1]]$location)){
+  tmp <- approx_cd_list[[1]] %>% 
+    dplyr::filter(location==loc) %>%
+    dplyr::group_by(location,model_1,model_2,horizon) %>%
+    dplyr::mutate(mean_approx_cd=mean(approx_cd)) %>% 
+    ungroup() %>%
+    dplyr::select(-c("approx_cd","target_end_date")) %>%
+    distinct()
+  tmp2 <- lapply(1:4, function(x) cd_matrix(tmp,x))
+  assign(paste0("c_mm_frame_",loc), tmp)
+  assign(paste0("c_frame_loc",loc), tmp2)
+}
+
+# leave as is and plot how differences change over time too (pick a few?) 
+total_frame <- approx_cd_list[[1]] %>%
+  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs "))
+total_frame$target_end_date <- as.Date(total_frame$target_end_date,origin="1970-01-01")
+# get location 
+locs <- unique(approx_cd_list[[1]]$location)
+loc_name <-  unique(wide_frame_case$abbreviation)
+# plot heatmaps
+for(loc in 1:5){
+  for(i in 1:4){
+    tmp <- get(paste0("c_mm_frame_",locs[loc]))
+    assign(paste0("p_",locs[loc],i),
+      distance_heatmap(tmp,i,
+                         paste0(loc_name[loc], "- Mean Approx. CD - \n",i," wk Ahead Inc Case")))
+  }
+}
+# scatterplot
+# names <- combinations(n=length(unique(approx_cd_list[[1]]$model_1)),
+#                       r=2,
+#                       v=unique(approx_cd_list[[1]]$model_1),repeats.allowed=F)
+# n_list <- paste(names[,1],names[,2],sep=" vs ")[1:15]
+for(loc in 1:5){
+  tmp <-total_frame %>%
+          dplyr::filter(location==locs[loc]) %>%
+          dplyr::group_by(horizon,target_end_date) %>%
+          dplyr::filter(model_1 == "COVIDhub-ensemble",
+                        model_2 != "COVIDhub-ensemble") %>%
+          dplyr:: ungroup()
+  assign(paste0("t_",loc),
+    ggplot(tmp, aes(x=target_end_date, y=approx_cd,col=pair)) + 
+    geom_point(alpha=0.6) + 
+    geom_line(alpha=0.4) +
+    ylab(paste0("Approx CD from Baseline Over Time - ",loc_name[loc])) +
+    facet_wrap(vars(horizon), nrow = 2) +
+    theme(legend.text = element_text(size=6)))
+}
+```
+
+Below are the heatmaps of mean approximated pairwise CD across time by location-target:
+
+```{r,fig.align='center'}
+grid.arrange(p_21, p_22,p_23, p_24, 
+             ncol=2)
+grid.arrange(p_151, p_152,p_153, p_154, 
+             ncol=2)
+grid.arrange(p_231, p_232,p_233, p_234, 
+             ncol=2)
+grid.arrange(p_501, p_502,p_503, p_504, 
+             ncol=2)
+grid.arrange(p_561, p_562,p_563, p_564, 
+             ncol=2)
+```
+
+Below are the plots of approximated pairwise distances over time. Unlike indicent death targets, there are too many model pairs to show (12 models for inc death and 17 models for inc case, so we have a combination of 6 choose 2 with no repeats (15) vs a combination of 11 choose 2 with no repeats (55)). So, I only pick the first 15 of the combinations:
+
+```{r,fig.align='center'}
+t_1
+t_2
+t_3
+t_4
+t_5
+```
+
+
+```{r}
+library(ggdendro)
+for(j in 1:5){
+for(i in 1:4){
+    assign(paste0("dp_",i),
+    ggdendrogram(
+      hclust(as.dist(get(paste0("c_frame_loc",locs[j]))[[i]]), method = "ward.D", members = NULL)
+      ,size = 2) +
+      labs(title=paste0("Dendrogram - ",i, " wk ahead inc case - ",loc_name[j]))+
+      xlab("") +
+      ylab("Mean Cramer's Distance") +
+      theme(axis.text.x = element_text(size=5),
+            axis.text.y = element_text(size=7),
+            plot.margin=unit(c(0,0,0,0),"cm"),
+            plot.title = element_text(size=8)))
+  } 
+  grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
+}
+```
