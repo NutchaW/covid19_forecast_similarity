@@ -244,7 +244,8 @@ for(i in 1:4){
 ```
 
 
-# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Case
+
+# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Case 
 
 ## 5 locations with the highest number of COVID-19 cases by the end of February 2021
 
@@ -384,7 +385,7 @@ for(loc in loc_name$location){
 }
 ```
 
-Below are the heat maps of mean approximated pairwise CD across time by location-target:
+Below are the heatmaps of mean approximated pairwise CD across time by location-target:
 
 ```{r,fig.align='center'}
 # print heatmapes
@@ -421,5 +422,3 @@ for(i in 1:4){
   grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
 }
 ```
-
-
