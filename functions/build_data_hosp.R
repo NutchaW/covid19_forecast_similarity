@@ -1,3 +1,8 @@
+library(lubridate)
+library(tidyverse)
+library(zoltr)
+library(covidHubUtils)
+
 # script to build a dataframe of model 
 # first sat end date for 1 wk ahead
 first_end_date <- as.Date("2021-01-07") # change this to January some time after new year
@@ -25,11 +30,16 @@ hosp_forecasts <- map_dfr(date_range,
                    })
 
 #create new col to make division of forecasts - by "week" (7 days of forecasts grouped together)
-hosp_forecasts_test <- hosp_forecasts %>%
+
+hosp_forecasts_filtered <- hosp_forecasts %>%
   dplyr::filter(weekdays(`target_end_date`) == weekdays(most_recent_end_date)) %>%
-  dplyr::mutate(horizon_week = ifelse(horizon %in% 8:14, 2, 
-                                      ifelse(horizon %in% 15:21, 3,
-                                             ifelse(horizon %in% 22:28, 4, 1))))
+  dplyr::mutate(horizon_week = case_when(
+    horizon %in% 1:7 ~ 1,
+    horizon %in% 8:14 ~ 2, 
+    horizon %in% 15:21 ~ 3,
+    horizon %in% 21:28 ~ 4,
+  ))
+                  
 
 
 ######################################### smaller toy data set to play around with
@@ -39,7 +49,8 @@ date_range_small <- seq.Date(from = as.Date("2021-04-22"), to = most_recent_end_
 hosp_forecasts_small <- map_dfr(date_range_small,
                           function(x) {
                             covidHubUtils::load_latest_forecasts(models = c("CU-scenario_low", "JHUAPL-Gecko",
-                                                                            "JHUAPL-SLPHospEns", "COVIDhub-ensemble"),
+                                                                            "JHUAPL-SLPHospEns", "COVIDhub-ensemble",
+                                                                            "LANL-GrowthRate"),
                                                                  last_forecast_date = x,
                                                                  forecast_date_window_size=6,
                                                                  # pick one
@@ -49,13 +60,14 @@ hosp_forecasts_small <- map_dfr(date_range_small,
                                                                  source = "zoltar")
                           })
 
-# make easier to read
+# make easier to read and filter target end dates to be a single day (Thursdays)
 hosp_forecasts_small_filtered <- hosp_forecasts_small %>%
   dplyr::select(-c(`location_name`, `geo_value`, `full_location_name`, `geo_type`,
                    `location`, `quantile`, `population`)) %>%
   dplyr::filter(weekdays(`target_end_date`) == weekdays(most_recent_end_date)) %>%
-  dplyr::mutate(horizon_week = ifelse(horizon %in% 8:14, 2, 
-                                      ifelse(horizon %in% 15:21, 3,
-                                             ifelse(horizon %in% 22:28, 4, 1))))
-
-
+  dplyr::mutate(horizon_week = case_when(
+    horizon %in% 1:7 ~ 1,
+    horizon %in% 8:14 ~ 2, 
+    horizon %in% 15:21 ~ 3,
+    horizon %in% 21:28 ~ 4,
+  ))
