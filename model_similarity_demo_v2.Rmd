@@ -88,7 +88,7 @@ for(loc in loc_name$location){
   tmp <- approx_cd_list[[2]] %>% 
     dplyr::filter(location==loc) 
   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
-  assign(paste0("d_frame_loc",loc), tmp)
+  assign(paste0("d_frame_loc",loc), tmp_list)
 }
 
 # build heatmaps and scatter plots
@@ -139,9 +139,9 @@ for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
     ggdendrogram(
-      hclust(as.dist(get(paste0("d_frame_loc",locs[j]))[[i]]), method = "ward.D", members = NULL)
+      hclust(as.dist(get(paste0("d_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
       ,size = 2) +
-      labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name[j]))+
+      labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
       theme(axis.text.x = element_text(size=5),
@@ -178,7 +178,7 @@ for(loc in loc_name$location){
   tmp <- approx_cd_list[[2]] %>% 
     dplyr::filter(location==loc) 
   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
-  assign(paste0("d_frame_loc",loc), tmp)
+  assign(paste0("d_frame_loc",loc), tmp_list)
 }
 
 # build heatmaps and scatter plots
@@ -229,9 +229,9 @@ for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
     ggdendrogram(
-      hclust(as.dist(get(paste0("d_frame_loc",locs[j]))[[i]]), method = "ward.D", members = NULL)
+      hclust(as.dist(get(paste0("d_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
       ,size = 2) +
-      labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name[j]))+
+      labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
       theme(axis.text.x = element_text(size=5),
@@ -272,7 +272,7 @@ for(loc in loc_name$location){
   tmp <- approx_cd_list[[2]] %>% 
     dplyr::filter(location==loc) 
   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
-  assign(paste0("c_frame_loc",loc), tmp)
+  assign(paste0("c_frame_loc",loc), tmp_list)
 }
 
 # build heatmaps and scatter plots
@@ -321,9 +321,9 @@ for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
     ggdendrogram(
-      hclust(as.dist(get(paste0("c_frame_loc",locs[j]))[[i]]), method = "ward.D", members = NULL)
+      hclust(as.dist(get(paste0("c_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
       ,size = 2) +
-      labs(title=paste0("Dendrogram - ",i, " wk ahead inc case - ",loc_name[j]))+
+      labs(title=paste0("Dendrogram - ",i, " wk ahead inc case - ",loc_name$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
       theme(axis.text.x = element_text(size=5),
@@ -360,7 +360,7 @@ for(loc in loc_name$location){
   tmp <- approx_cd_list[[2]] %>% 
     dplyr::filter(location==loc) 
   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
-  assign(paste0("c_frame_loc",loc), tmp)
+  assign(paste0("c_frame_loc",loc), tmp_list)
 }
 
 # build heatmaps and scatter plots
@@ -409,9 +409,9 @@ for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
     ggdendrogram(
-      hclust(as.dist(get(paste0("c_frame_loc",locs[j]))[[i]]), method = "ward.D", members = NULL)
+      hclust(as.dist(get(paste0("c_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
       ,size = 2) +
-      labs(title=paste0("Dendrogram - ",i, " wk ahead inc case - ",loc_name[j]))+
+      labs(title=paste0("Dendrogram - ",i, " wk ahead inc case - ",loc_name$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
       theme(axis.text.x = element_text(size=5),
