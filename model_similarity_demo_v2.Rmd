@@ -247,9 +247,9 @@ for(i in 1:4){
 
 # COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Case 
 
-## 5 locations with the highest number of COVID-19 cases by the end of February 2021
+## 5 locations with the highest number of COVID-19 cumulative cases from 01/25/2020 to 02/07/2021
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all probability levels, from mid-October 2020 until May 24th,2021 for 5 locations with the highest incident cases in the week of February 27, 2021.
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all probability levels, from mid-October 2020 until May 24th,2021 for 5 locations with the highest cumulative cases.
 
 ```{r}
 # case forecast
@@ -335,9 +335,9 @@ for(i in 1:4){
 }
 ```
 
-## 5 locations with the lowest number of COVID-19 cases by the end of February 2021
+## 5 locations with the lowest number of COVID-19 cases from 01/25/2020 to 02/07/2021
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all probability levels, from mid-October 2020 until May 24th,2021 for 5 locations with the lowest incident cases in the week of February 27, 2021.
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all probability levels, from mid-October 2020 until May 24th,2021 for 5 locations with the lowest cumulative cases.
 
 ```{r}
 # case forecast

@@ -54,16 +54,25 @@ death_truth <- load_truth("JHU",
 # get top 5 and bottom 5
 dlocs <- death_truth$location[1:5]
 # do the same for cases
-cases_truth <- load_truth("JHU", 
-                          "inc case", 
-                          truth_end_date = as.Date("2021-03-08"),
-                          temporal_resolution="weekly",
-                          data_location = "remote_hub_repo") %>%
-  # set the date
-  dplyr::filter(target_end_date=="2021-02-27",
-                geo_type=="state",
+end_dates <- seq(as.Date("2020-01-25"),as.Date("2021-02-27"),7)
+cases_truth <- purrr::map_dfr(end_dates, 
+                              function(dates)
+                                load_truth("JHU", 
+                                           "inc case", 
+                                           truth_end_date = dates,
+                                           temporal_resolution="weekly",
+                                           data_location = "remote_hub_repo")) 
+cases_truth_new <- cases_truth %>%
+  na.omit() %>%
+  dplyr::filter(geo_type=="state",
                 location != "US")%>%
-  dplyr::arrange(desc(value))
+  dplyr::group_by(location) %>%
+  dplyr::mutate(cum_case=sum(value)) %>%
+  # set the date
+  dplyr::select(-c("target_end_date","value"))%>%
+  ungroup() %>%
+  dplyr::distinct() %>%
+  dplyr::arrange(desc(cum_case))
 clocs <- cases_truth$location[1:5]
 # pull data
 for(i in 1:4){
@@ -153,21 +162,11 @@ dlocs <- dlocs$location
 
   
 # do the same for cases
-cases_truth <- load_truth("JHU", 
-                          "inc case", 
-                          truth_end_date = as.Date("2021-03-08"),
-                          temporal_resolution="weekly",
-                          data_location = "remote_hub_repo") %>%
-  # set the date
-  dplyr::filter(target_end_date=="2021-02-27",
-                geo_type=="state",
-                location != "US")%>%
-  dplyr::arrange(desc(value))
-# get bottom 5
-clocs <- cases_truth %>%
-  dplyr::filter(location < 60) %>% 
-  slice_min(n=5, order_by = value)
-clocs <- clocs$location
+end_dates <- seq(as.Date("2020-01-25"),as.Date("2021-02-27"),7)
+cases_truth_low <- cases_truth_new %>%
+  dplyr::arrange(cum_case) %>%
+  dplyr::filter(as.numeric(location)<60)
+clocs <- cases_truth_low$location[1:5]
 
 # run to build
   for(i in 1:4){
