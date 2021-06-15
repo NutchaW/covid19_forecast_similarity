@@ -22,6 +22,7 @@ library(energy)
 library(knitr)
 library(data.table)
 library(covidHubUtils)
+library(RColorBrewer)
 #devtools::install_github("reichlab/covidHubUtils")
 library(lubridate)
 library(zoltr)
@@ -30,7 +31,7 @@ library(gtools)
 library(gridExtra)
 knitr::opts_chunk$set(echo=FALSE,
                        comment = FALSE, message=FALSE, fig.show= 'hold',fig.pos="H",table.placement='H',
-                       fig.align = 'center')
+                       fig.align = 'center',warning = FALSE)
 ```
 
 
@@ -46,7 +47,13 @@ source("./functions/distance_func_script.R")
 target_horizon <- 1:4
 target_var <- c("inc death","inc case")
 # read in model metadata
-metadata <- read.csv("./metadata_categorized.csv") 
+metadata <- read.csv("./metadata_categorized.csv") %>%
+  dplyr::rowwise() %>%
+  dplyr::mutate(hybrid =  ifelse(sum(stats,agent_based,
+                                     compartmental,machine_learning)>1, TRUE,FALSE)) 
+# manual change 
+metadata$stats[which(metadata$team_name == "Karlen Working Group")] <- TRUE
+
 # each target will have different sets of models based on the current filtering
 ## high count
 wide_frame_death <- read.csv("./data/quantile_frame.csv") 
@@ -70,6 +77,15 @@ c_meta_low <- colnames(c_frame_low)[-c(1:6)]
 ```{r}
 # death forecast
 loc_name <-  unique(wide_frame_death[,c("abbreviation","location")])
+d_metadata <- metadata %>%
+  dplyr::filter(model_abbr %in% d_meta)
+recent_dmeta <- d_metadata %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
 # calculate distance matrices
 q_set <- unique(d_frame$quantile) 
 approx_cd_list <- build_distance_frame(d_frame, 
@@ -96,9 +112,9 @@ for(loc in loc_name$location){
     tmp <- approx_cd_list[[2]] %>%
     dplyr::filter(location==loc)
     assign(paste0("p_",loc),
-      distance_heatmap(tmp,
+      suppressWarnings(distance_heatmap(tmp,
                        paste0(loc_name$abbreviation[which(loc_name$location==loc)],
-                                "- Mean Approx. CD - Inc Death Forecasts by Horizon")))
+                                "- Mean Approx. CD - Inc Death Forecasts by Horizon"),recent_dmeta)))
       tmp <-total_frame %>%
           dplyr::filter(location==loc) %>%
           dplyr::group_by(horizon,target_end_date) %>%
@@ -108,7 +124,7 @@ for(loc in loc_name$location){
       assign(paste0("t_",loc),
              scatter(tmp,
             paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
-                loc_name$abbreviation[which(loc_name$location==loc)]) )
+                loc_name$abbreviation[which(loc_name$location==loc)]),recent_dmeta)
     )
 }
 ```
@@ -160,6 +176,15 @@ The pairwise approximated Cramer's distances are calculated for the models that 
 ```{r}
 # death forecast
 loc_name <-  unique(wide_frame_death_low[,c("abbreviation","location")])
+d_metadata <- metadata %>%
+  dplyr::filter(model_abbr %in% d_meta_low)
+recent_dmeta <- d_metadata %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
 # calculate distance matrices
 q_set <- unique(d_frame_low$quantile) 
 approx_cd_list <- build_distance_frame(d_frame_low, 
@@ -188,7 +213,7 @@ for(loc in loc_name$location){
     assign(paste0("p_",loc),
       distance_heatmap(tmp,
                        paste0(loc_name$abbreviation[which(loc_name$location==loc)],
-                                "- Mean Approx. CD - Inc Death Forecasts by Horizon")))
+                                "- Mean Approx. CD - Inc Death Forecasts by Horizon"),recent_dmeta))
       tmp <-total_frame %>%
           dplyr::filter(location==loc) %>%
           dplyr::group_by(horizon,target_end_date) %>%
@@ -198,7 +223,7 @@ for(loc in loc_name$location){
       assign(paste0("t_",loc),
              scatter(tmp,
             paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
-                loc_name$abbreviation[which(loc_name$location==loc)]) )
+                loc_name$abbreviation[which(loc_name$location==loc)]),recent_dmeta)
     )
 }
 ```
@@ -254,6 +279,15 @@ The pairwise approximated Cramer's distances are calculated for the models that 
 ```{r}
 # case forecast
 loc_name <-  unique(wide_frame_case_low[,c("abbreviation","location")])
+c_metadata <- metadata %>%
+  dplyr::filter(model_abbr %in% c_meta)
+recent_cmeta <- c_metadata %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
 # calculate distance matrices
 q_set <- unique(c_frame_low$quantile) 
 approx_cd_list <- build_distance_frame(c_frame_low, 
@@ -282,7 +316,7 @@ for(loc in loc_name$location){
     assign(paste0("p_",loc),
       distance_heatmap(tmp,
                        paste0(loc_name$abbreviation[which(loc_name$location==loc)],
-                                "- Mean Approx. CD - Inc Case Forecasts by Horizon")))
+                                "- Mean Approx. CD - Inc Case Forecasts by Horizon"),recent_cmeta))
       tmp <-total_frame %>%
           dplyr::filter(location==loc) %>%
           dplyr::group_by(horizon,target_end_date) %>%
@@ -292,7 +326,7 @@ for(loc in loc_name$location){
       assign(paste0("t_",loc),
              scatter(tmp,
             paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
-                loc_name$abbreviation[which(loc_name$location==loc)]) )
+                loc_name$abbreviation[which(loc_name$location==loc)]),recent_cmeta )
     )
 }
 ```
@@ -342,6 +376,15 @@ The pairwise approximated Cramer's distances are calculated for the models that 
 ```{r}
 # case forecast
 loc_name <-  unique(wide_frame_case[,c("abbreviation","location")])
+c_metadata <- metadata %>%
+  dplyr::filter(model_abbr %in% c_meta_low)
+recent_cmeta <- c_metadata %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
 # calculate distance matrices
 q_set <- unique(c_frame$quantile) 
 approx_cd_list <- build_distance_frame(c_frame, 
@@ -370,7 +413,7 @@ for(loc in loc_name$location){
     assign(paste0("p_",loc),
       distance_heatmap(tmp,
                        paste0(loc_name$abbreviation[which(loc_name$location==loc)],
-                                "- Mean Approx. CD - Inc Case Forecasts by Horizon")))
+                                "- Mean Approx. CD - Inc Case Forecasts by Horizon"),recent_cmeta))
       tmp <-total_frame %>%
           dplyr::filter(location==loc) %>%
           dplyr::group_by(horizon,target_end_date) %>%
@@ -380,7 +423,7 @@ for(loc in loc_name$location){
       assign(paste0("t_",loc),
              scatter(tmp,
             paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
-                loc_name$abbreviation[which(loc_name$location==loc)]) )
+                loc_name$abbreviation[which(loc_name$location==loc)]),recent_cmeta )
     )
 }
 ```

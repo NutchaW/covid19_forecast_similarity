@@ -158,7 +158,7 @@ cd_matrix <- function(mean_cd_frame, h){
 
 # a function that takes a matrix and plot a heatmap
 # distance_heatmap <- function(sum_dist,h,target,name){
-distance_heatmap <- function(sum_dist,name,order_list){
+distance_heatmap <- function(sum_dist,name,metadata=NULL){
   tmp <- sum_dist %>%
     dplyr::group_by(model_1,model_2) %>%
     dplyr::mutate(ov_mean=mean(mean_dis)) %>%
@@ -167,36 +167,91 @@ distance_heatmap <- function(sum_dist,name,order_list){
     dplyr::distinct(.,.keep_all = TRUE) %>%
     dplyr::arrange(desc(ov_mean))
   order_list <- unique(tmp$model_1)
-  # arrange by mean dist closest to ensemble
-  ggplot(sum_dist, aes(factor(model_1,levels=order_list),
-                       factor(model_2,levels=order_list))) +
-    geom_tile(aes(fill= mean_dis)) +
-    facet_wrap(~horizon) +
-    theme(axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-          axis.text.y=element_text(size=rel(0.7)))+
-    labs(title=name)+
-    xlab("") +
-    ylab("") +
-    scale_fill_distiller(palette = "YlOrRd",direction=+1,name="distance") +
-    theme(plot.title = element_text(size=8),
-          legend.title = element_text(size=5),
-          legend.key.size = unit(0.3, 'cm'),
-          legend.text = element_text(size=4),
-          plot.margin=unit(c(0,0,0,0),"cm"))
+  if (is.null(metadata)) {
+    ggplot(sum_dist, aes(factor(model_1,levels=order_list),
+                         factor(model_2,levels=order_list))) +
+      geom_tile(aes(fill= mean_dis)) +
+      facet_wrap(~horizon) +
+      theme(axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            axis.text.y=element_text(size=rel(0.7)))+
+      labs(title=name)+
+      xlab("") +
+      ylab("") +
+      scale_fill_distiller(palette = "YlOrRd",direction=+1,name="distance") +
+      theme(plot.title = element_text(size=8),
+            legend.title = element_text(size=5),
+            legend.key.size = unit(0.3, 'cm'),
+            legend.text = element_text(size=4),
+            plot.margin=unit(c(0,0,0,0),"cm"))
+    
+  } else {
+    set1<-c("red","blue","purple","orange","pink","green")
+    color_set <- ifelse(metadata$ensemble, 
+                        set1[1], 
+                        ifelse(metadata$hybrid,
+                               set1[2],
+                               ifelse(metadata$stats,
+                                      set1[3],
+                                      ifelse(metadata$agent_based,
+                                             set1[4],
+                                             ifelse(metadata$compartmental,
+                                                    set1[5],
+                                                    set1[6])))))
+    type_color <-  color_set[order(match(metadata$model_abbr,order_list))]
+    ggplot(sum_dist, aes(factor(model_1,levels=order_list),
+                         factor(model_2,levels=order_list))) +
+      geom_tile(aes(fill= mean_dis)) +
+      facet_wrap(~horizon) +
+      theme(axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1, colour = type_color),
+            axis.text.y=element_text(size=rel(0.7), colour = type_color))+
+      labs(title=name)+
+      xlab("") +
+      ylab("") +
+      scale_fill_distiller(palette = "YlOrRd",direction=+1,name="distance") +
+      theme(plot.title = element_text(size=8),
+            legend.title = element_text(size=5),
+            legend.key.size = unit(0.3, 'cm'),
+            legend.text = element_text(size=4),
+            plot.margin=unit(c(0,0,0,0),"cm"))
+  }
 }
 
-scatter <-  function(data,title_name){
+scatter <-  function(data,title_name,metadata=NULL){
   dat <- data %>% 
+    dplyr::left_join(metadata,by=c("model_2"="model_abbr")) %>%
     dplyr::mutate(Model=model_2) 
-  ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model)) + 
-    geom_point(alpha=0.6,size=0.5) + 
-    geom_line(alpha=0.4) +
-    ggtitle(title_name) +
-    ylab("Approx. CD") +
-    xlab("Forecast  End Date") +
-    facet_wrap(vars(horizon), nrow = 2,scales = "free") +
-    theme(legend.text = element_text(size=5),
-          legend.title = element_text(size=7))
+  if (is.null(metadata)) {
+    ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model)) + 
+      geom_point(alpha=0.6,size=0.8) + 
+      geom_line(alpha=0.4) +
+      ggtitle(title_name) +
+      ylab("Approx. CD") +
+      xlab("Forecast End Date") +
+      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
+      theme(legend.text = element_text(size=5),
+            legend.title = element_text(size=7))
+  } else {
+    metadata$model_type <- ifelse(metadata$ensemble, 
+                                  "ensemble", 
+                                  ifelse(metadata$hybrid,
+                                         "hybrid",
+                                         ifelse(metadata$stats,
+                                                "statistical",
+                                                ifelse(metadata$agent_based,
+                                                       "agent-based",
+                                                       ifelse(metadata$compartmental,
+                                                              "compartmental",
+                                                              "machine learning")))))
+    ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model,group=model_type)) + 
+      geom_point(alpha=0.6,size=0.8,aes(shape=model_type)) + 
+      geom_line(alpha=0.4) +
+      ggtitle(title_name) +
+      ylab("Approx. CD") +
+      xlab("Forecast End Date") +
+      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
+      theme(legend.text = element_text(size=5),
+            legend.title = element_text(size=7))
+  }
 }
 
 sym_mat <- function(X){

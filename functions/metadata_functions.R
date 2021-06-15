@@ -55,7 +55,7 @@ make_metadata_table <- function(frame,summarizing=FALSE) {
   # check for machine learning
   ml.c <- "neural network|random forecast|learning"
   # check for compartmental 
-  compart.c <- "sir|seir|compartmental"
+  compart.c <- "sir|seir|slir|compartmental|differential equations"
   # check for spatio
   spatial.c <- "spatio|spatial"
   # agent based
@@ -64,8 +64,6 @@ make_metadata_table <- function(frame,summarizing=FALSE) {
   ensemble.c <- "ensemble|pool|pooling"
   # human expert or not
   hexpert.c <- "experts|crowdsourc"
-  # time series or not
-  ts.c <- "time series|arima|sarima|arma"
   # data check
   # JHU cases/deaths
   jhu.c <- "jhu|john hopkins"
@@ -80,7 +78,7 @@ make_metadata_table <- function(frame,summarizing=FALSE) {
   # demographic data (for in methods and data)
   demog.c <- "demographic|socioeconomic|age|demography"
   # statistical
-  stats.c <- "gams|regression|arma|arima|splines"
+  stats.c <- "gams|regression|arma|arima|splines|time series|time-series|baseline|average"
   final_frame <- frame %>%
     dplyr::filter(attribute %in% 
                     c("data_inputs","methods","methods_long")) %>%
@@ -120,10 +118,6 @@ make_metadata_table <- function(frame,summarizing=FALSE) {
                                           (grepl(hexpert.c,tolower(methods)))|
                                           (grepl(hexpert.c,tolower(methods_long))),
                                         TRUE,FALSE),
-                  time_series=  ifelse((grepl(ts.c,tolower(model_name)))|
-                                         (grepl(ts.c,tolower(methods)))|
-                                         (grepl(ts.c,tolower(methods_long))),
-                                       TRUE,FALSE),
                   JHU_data=  ifelse((grepl(jhu.c,tolower(data_inputs))),
                                     TRUE,FALSE),
                   NYTimes_data=  ifelse((grepl(nyt.c,tolower(data_inputs))),
@@ -142,7 +136,8 @@ make_metadata_table <- function(frame,summarizing=FALSE) {
                   stats=  ifelse((grepl(stats.c,tolower(data_inputs)))|
                                    (grepl(stats.c,tolower(methods)))|
                                    (grepl(stats.c,tolower(methods_long))),
-                                 TRUE,FALSE))
+                                 TRUE,FALSE),
+                  hybrid =  ifelse(sum(stats,ensemble,agent_based,compartmental,machine_learning)>1, TRUE,FALSE))
   }
   return(final_frame)
 }
