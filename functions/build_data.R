@@ -53,6 +53,7 @@ death_truth <- load_truth("JHU",
   dplyr::arrange(desc(value))
 # get top 5 and bottom 5
 dlocs <- death_truth$location[1:5]
+#---------------------------------------------------------------------------------------------#
 # do the same for cases
 end_dates <- seq(as.Date("2020-01-25"),as.Date("2021-02-27"),7)
 cases_truth <- purrr::map_dfr(end_dates, 
@@ -74,6 +75,8 @@ cases_truth_new <- cases_truth %>%
   dplyr::distinct() %>%
   dplyr::arrange(desc(cum_case))
 clocs <- cases_truth$location[1:5]
+#---------------------------------------------------------------------------------------------#
+
 # pull data
 for(i in 1:4){
   assign(paste0("quantile_frame",i),
