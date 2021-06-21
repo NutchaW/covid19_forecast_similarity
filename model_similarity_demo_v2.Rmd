@@ -1,7 +1,7 @@
 ---
 title: "Forecasting Model Similarity"
 author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit, Li Shandross"
-date: "06/10/2021"
+date: "06/21/2021"
 header-includes:
    - \usepackage{tabularx}
    - \usepackage{hyperref}
@@ -151,8 +151,37 @@ We can cluster the distances using hierarchical clustering. Different linkages w
 
 ```{r}
 library(ggdendro)
+recent_dmeta$model_type <- ifelse(recent_dmeta$ensemble, 
+                                  "ensemble", 
+                                  ifelse(recent_dmeta$hybrid,
+                                         "hybrid",
+                                         ifelse(recent_dmeta$stats,
+                                                "statistical",
+                                                ifelse(recent_dmeta$agent_based,
+                                                       "agent-based",
+                                                       ifelse(recent_dmeta$compartmental,
+                                                              "compartmental",
+                                                              "machine learning")))))
+short_meta <- recent_dmeta[,c(3,ncol(recent_dmeta))]
 for(j in 1:5){
 for(i in 1:4){
+    hclust_dat <- hclust(as.dist(get(paste0("d_frame_loc",loc_name$location[j]))[[i]]), 
+                       method = "ward.D", members = NULL)
+    ddata <- label(dendro_data(as.dendrogram(hclust_dat))) %>%
+      left_join(short_meta,by=c("label"="model_abbr"))
+    set1<-c("red","blue","purple","orange","pink","green")
+    color_set <- ifelse(ddata$model_type == "ensemble", 
+                        set1[1], 
+                        ifelse(ddata$model_type == "hybrid",
+                               set1[2],
+                               ifelse(ddata$model_type == "stats",
+                                      set1[3],
+                                      ifelse(ddata$model_type =="agent_based",
+                                             set1[4],
+                                             ifelse(ddata$model_type=="compartmental",
+                                                    set1[5],
+                                                    set1[6])))))
+    
     assign(paste0("dp_",i),
     ggdendrogram(
       hclust(as.dist(get(paste0("d_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
@@ -160,10 +189,11 @@ for(i in 1:4){
       labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
-      theme(axis.text.x = element_text(size=5),
+      theme(axis.text.x = element_text(size=5,colour=color_set),
             axis.text.y = element_text(size=7),
             plot.margin=unit(c(0,0,0,0),"cm"),
-            plot.title = element_text(size=8)))
+            plot.title = element_text(size=8)
+            ))
   } 
   grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
 }
@@ -249,9 +279,36 @@ for(loc in loc_name$location){
 We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
 
 ```{r}
-library(ggdendro)
+recent_dmeta$model_type <- ifelse(recent_dmeta$ensemble, 
+                                  "ensemble", 
+                                  ifelse(recent_dmeta$hybrid,
+                                         "hybrid",
+                                         ifelse(recent_dmeta$stats,
+                                                "statistical",
+                                                ifelse(recent_dmeta$agent_based,
+                                                       "agent-based",
+                                                       ifelse(recent_dmeta$compartmental,
+                                                              "compartmental",
+                                                              "machine learning")))))
+short_meta <- recent_dmeta[,c(3,ncol(recent_dmeta))]
 for(j in 1:5){
 for(i in 1:4){
+    hclust_dat <- hclust(as.dist(get(paste0("d_frame_loc",loc_name$location[j]))[[i]]), 
+                       method = "ward.D", members = NULL)
+    ddata <- label(dendro_data(as.dendrogram(hclust_dat))) %>%
+      left_join(short_meta,by=c("label"="model_abbr"))
+    set1<-c("red","blue","purple","orange","pink","green")
+    color_set <- ifelse(ddata$model_type == "ensemble", 
+                        set1[1], 
+                        ifelse(ddata$model_type == "hybrid",
+                               set1[2],
+                               ifelse(ddata$model_type == "stats",
+                                      set1[3],
+                                      ifelse(ddata$model_type =="agent_based",
+                                             set1[4],
+                                             ifelse(ddata$model_type=="compartmental",
+                                                    set1[5],
+                                                    set1[6])))))
     assign(paste0("dp_",i),
     ggdendrogram(
       hclust(as.dist(get(paste0("d_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
@@ -259,7 +316,7 @@ for(i in 1:4){
       labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
-      theme(axis.text.x = element_text(size=5),
+      theme(axis.text.x = element_text(size=5,colour = color_set),
             axis.text.y = element_text(size=7),
             plot.margin=unit(c(0,0,0,0),"cm"),
             plot.title = element_text(size=8)))
@@ -350,9 +407,37 @@ for(loc in loc_name$location){
 
 
 ```{r}
-library(ggdendro)
+recent_cmeta$model_type <- ifelse(recent_cmeta$ensemble, 
+                                  "ensemble", 
+                                  ifelse(recent_cmeta$hybrid,
+                                         "hybrid",
+                                         ifelse(recent_cmeta$stats,
+                                                "statistical",
+                                                ifelse(recent_cmeta$agent_based,
+                                                       "agent-based",
+                                                       ifelse(recent_cmeta$compartmental,
+                                                              "compartmental",
+                                                              "machine learning")))))
+short_meta <- recent_cmeta[,c(3,ncol(recent_cmeta))]
+
 for(j in 1:5){
 for(i in 1:4){
+    hclust_dat <- hclust(as.dist(get(paste0("c_frame_loc",loc_name$location[j]))[[i]]), 
+                       method = "ward.D", members = NULL)
+    ddata <- label(dendro_data(as.dendrogram(hclust_dat))) %>%
+      left_join(short_meta,by=c("label"="model_abbr"))
+    set1<-c("red","blue","purple","orange","pink","green")
+    color_set <- ifelse(ddata$model_type == "ensemble", 
+                        set1[1], 
+                        ifelse(ddata$model_type == "hybrid",
+                               set1[2],
+                               ifelse(ddata$model_type == "stats",
+                                      set1[3],
+                                      ifelse(ddata$model_type =="agent_based",
+                                             set1[4],
+                                             ifelse(ddata$model_type=="compartmental",
+                                                    set1[5],
+                                                    set1[6])))))
     assign(paste0("dp_",i),
     ggdendrogram(
       hclust(as.dist(get(paste0("c_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
@@ -360,7 +445,7 @@ for(i in 1:4){
       labs(title=paste0("Dendrogram - ",i, " wk ahead inc case - ",loc_name$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
-      theme(axis.text.x = element_text(size=5),
+      theme(axis.text.x = element_text(size=5,colour = color_set),
             axis.text.y = element_text(size=7),
             plot.margin=unit(c(0,0,0,0),"cm"),
             plot.title = element_text(size=8)))
@@ -447,9 +532,36 @@ for(loc in loc_name$location){
 
 
 ```{r}
-library(ggdendro)
+recent_cmeta$model_type <- ifelse(recent_cmeta$ensemble, 
+                                  "ensemble", 
+                                  ifelse(recent_cmeta$hybrid,
+                                         "hybrid",
+                                         ifelse(recent_cmeta$stats,
+                                                "statistical",
+                                                ifelse(recent_cmeta$agent_based,
+                                                       "agent-based",
+                                                       ifelse(recent_cmeta$compartmental,
+                                                              "compartmental",
+                                                              "machine learning")))))
+short_meta <- recent_cmeta[,c(3,ncol(recent_cmeta))]
 for(j in 1:5){
 for(i in 1:4){
+    hclust_dat <- hclust(as.dist(get(paste0("c_frame_loc",loc_name$location[j]))[[i]]), 
+                       method = "ward.D", members = NULL)
+    ddata <- label(dendro_data(as.dendrogram(hclust_dat))) %>%
+      left_join(short_meta,by=c("label"="model_abbr"))
+    set1<-c("red","blue","purple","orange","pink","green")
+    color_set <- ifelse(ddata$model_type == "ensemble", 
+                        set1[1], 
+                        ifelse(ddata$model_type == "hybrid",
+                               set1[2],
+                               ifelse(ddata$model_type == "stats",
+                                      set1[3],
+                                      ifelse(ddata$model_type =="agent_based",
+                                             set1[4],
+                                             ifelse(ddata$model_type=="compartmental",
+                                                    set1[5],
+                                                    set1[6])))))
     assign(paste0("dp_",i),
     ggdendrogram(
       hclust(as.dist(get(paste0("c_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
@@ -457,7 +569,7 @@ for(i in 1:4){
       labs(title=paste0("Dendrogram - ",i, " wk ahead inc case - ",loc_name$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
-      theme(axis.text.x = element_text(size=5),
+      theme(axis.text.x = element_text(size=5,colour = color_set),
             axis.text.y = element_text(size=7),
             plot.margin=unit(c(0,0,0,0),"cm"),
             plot.title = element_text(size=8)))

@@ -229,17 +229,21 @@ scatter <-  function(data,title_name,metadata=NULL){
       xlab("Forecast End Date") +
       facet_wrap(vars(horizon), nrow = 2,scales = "free") +
       theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7))
+            legend.title = element_text(size=7),
+            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            legend.key.size = unit(0.5, 'cm'))+
+      scale_x_date(date_breaks = "1 month",
+                   date_labels = "%m-%y")
   } else {
-    metadata$model_type <- ifelse(metadata$ensemble, 
+    dat$model_type <- ifelse(dat$ensemble, 
                                   "ensemble", 
-                                  ifelse(metadata$hybrid,
+                                  ifelse(dat$hybrid,
                                          "hybrid",
-                                         ifelse(metadata$stats,
+                                         ifelse(dat$stats,
                                                 "statistical",
-                                                ifelse(metadata$agent_based,
+                                                ifelse(dat$agent_based,
                                                        "agent-based",
-                                                       ifelse(metadata$compartmental,
+                                                       ifelse(dat$compartmental,
                                                               "compartmental",
                                                               "machine learning")))))
     ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model,group=model_type)) + 
@@ -250,7 +254,11 @@ scatter <-  function(data,title_name,metadata=NULL){
       xlab("Forecast End Date") +
       facet_wrap(vars(horizon), nrow = 2,scales = "free") +
       theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7))
+            legend.title = element_text(size=7),
+            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            legend.key.size = unit(0.5, 'cm'))+
+      scale_x_date(date_breaks = "1 month",
+                   date_labels = "%m-%y")
   }
 }
 
