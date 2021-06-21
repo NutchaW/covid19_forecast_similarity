@@ -147,15 +147,95 @@ approx_cd_list_high <- build_distance_frame(h_frame_high,
                            approx_rule="trapezoid_riemann",
                            tau_F=q_set_high,tau_G=q_set_high)
 
+######## Scrapwork - trying to figure out why running the above code throws an error
+    q_F_ordered <- sort(q_F)
+    q_G_ordered <- sort(q_G)
+
+tar_loc <- main_frame %>%
+            dplyr::filter(location==unique(main_frame$location),
+                          target_variable=="inc death",
+                          horizon==c(1:4)) 
+            end_dates <- unique(tar_loc$target_end_date)
+          
+ 
+single_matrix <- tar_loc %>%
+              dplyr::filter(target_end_date==end_dates) %>%
+              dplyr::arrange(quantile) %>%
+              cd_combination(., "trapezoid_riemann", q_set,q_set) %>%
+              dplyr::mutate(horizon=horiz,
+                            location=loc,
+                            target_variable=target,
+                            target_end_date=end_date)
+            rbind(dist_frame,single_matrix) -> dist_frame
+
+            
+             single_tarloc<- single_matrix[ , colSums(is.na(single_matrix)) == 0]    
+    tmp <- single_tarloc %>%
+    dplyr::select(-c("target_variable","target_end_date","location","horizon"))
+
+    is.numeric(unlist(tmp[,eg[1,2]]))
+    
+  nc <- ncol(tmp)
+  cnames <- colnames(tmp)
+  eg <- expand.grid(1:nc, 1:nc)
+  nr <- nrow(eg)
+  v <- vector(length=nr)
+  for (i in 1:nr) {
+    cc <- calc_cramers_dist_one_model_pair(as.numeric(unlist(tmp[,eg[i,1]])),
+                                           q_set_high,
+                                           as.numeric(unlist(tmp[,eg[i,2]])),
+                                           q_set_high,
+                                           "trapezoid_riemann")
+    v[i] <- cc
+  } 
+  
+  q_F_ordered <- sort((unlist(tmp[,eg[i,1]])))
+  tau_F_ordered <- sort(q_set_high)
+  
+  
+#  calc_cramers_dist_unequal_space <-
+ # function(q_F, tau_F, q_G, tau_G, approx_rule) {
+  approx_rule = "trapezoid_riemann"
+    # check quantile order
+    q_F_ordered <- sort(as.numeric(unlist(tmp[,eg[1:9,1]])))
+    q_G_ordered <- sort(as.numeric(unlist(tmp[,eg[1:9,2]])))
+ 
+    # check probability level order
+    tau_F_ordered <- sort(q_set_high)
+    tau_G_ordered <- sort(q_set_high)
+
+    N <- length(q_F_ordered)
+    M <- length(q_G_ordered)
+    # pool quantiles:
+    q0 <- c(q_F_ordered, q_G_ordered)
+    # indicator whether the entry is from F or G
+    q <- q0[order(q0)]
+    tf <- unlist(sapply(q, function(x) ifelse(x %in% q_F_ordered,tau_F_ordered[which(x == q_F_ordered)],0)))
+    tg <- unlist(sapply(q, function(x) ifelse(x %in% q_G_ordered,tau_G_ordered[which(x == q_G_ordered)],0)))
+    diffs_q <- diff(q)
+    # probability level vectors
+    tau_F_v <- cummax(tf)
+    tau_G_v <- cummax(tg)
+    if (approx_rule == "left_sided_riemann") {
+      cvm <-
+        sum(((tau_F_v[1:(N + M) - 1] - tau_G_v[1:(N + M) - 1]) ^ 2) * diffs_q)
+    } else if (approx_rule == "trapezoid_riemann") {
+      cvm <-
+        sum((((tau_F_v[1:(N + M) - 1] - tau_G_v[1:(N + M) - 1]) ^ 2 + (tau_F_v[2:(N +
+                                                                                       M)] - tau_G_v[2:(N + M)]) ^ 2
+        ) / 2) * diffs_q)
+    }
+cvm
+
 
 #explore build_distance_frame()----------------------------------------------------#
 #(model_dataframe, horizon_list,target_list, approx_rule,tau_F,tau_G)
-  main_frame <- h_frame_high %>% 
+  main_frame <- d_frame %>% 
       dplyr::mutate(horizon = as.numeric(as.character(horizon)),
                     target_variable = as.character(target_variable),
                     location = as.character(location), 
                     target_end_date = as.Date(target_end_date)) %>%
-      dplyr::filter(target_variable %in% "inc hosp",
+      dplyr::filter(target_variable %in% "inc death",
                     horizon %in% c(1:4)) 
   if("forecast_date" %in% c(colnames(main_frame))){
     main_frame <- main_frame %>%
@@ -186,26 +266,14 @@ approx_cd_list_high <- build_distance_frame(h_frame_high,
         }
       }
   }
-  # calculate mean distance
-  mean_frame <- dist_frame %>%
-    dplyr::select(-"target_end_date") %>%
-    dplyr::group_by(horizon,location,target_variable,model_1,model_2) %>%
-    dplyr::mutate(mean_dis=mean(approx_cd)) %>%
-    dplyr::ungroup() %>%
-    dplyr::select(-"approx_cd") %>%
-    dplyr::arrange(factor(model_2, levels = unique(model_2))) %>%
-    distinct()
-  # median_frame <- dist_frame %>%
-  #   dplyr::select(-"target_end_date") %>%
-  #   dplyr::group_by(horizon,location,target_variable,model_1,model_2) %>%
-  #   dplyr::mutate(mean_dis=median(approx_cd)) %>%
-  #   dplyr::ungroup() %>%
-  #   dplyr::select(-"approx_cd") %>%
-  #   dplyr::arrange(factor(model_2, levels = unique(model_2))) %>%
-  #   distinct()
-  return(list(full_dataframe=dist_frame,mean_dataframe=mean_frame))
 #-----------------------------------------------------------------------------------#
 
+  
+```
+
+```{r}
+
+  
 # extract data
 total_frame <- approx_cd_list_high[[1]] %>%
   dplyr::mutate(pair=paste(model_1,model_2,sep=" vs "))
@@ -240,6 +308,7 @@ for(loc in loc_name$location){
     )
 }
 ```
+
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
