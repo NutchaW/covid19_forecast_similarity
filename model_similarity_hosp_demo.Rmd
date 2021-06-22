@@ -41,57 +41,6 @@ knitr::opts_chunk$set(echo=FALSE,
 The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 hospitalizations by end of May 2021, all probability levels, from the target end date of December, 17th 2020 to June 10th, 2021 .
 
 ```{r}
-source("./functions/distance_func_script.R")
-# set targets for analysis
-target_horizon <- 1:4
-target_var <- "inc hosp"
-# each target will have different sets of models based on the current filtering
-## high count
-wide_frame_hosp <- read.csv("./data/quantile_frame_hosp_top.csv")
-
-# # find models that don't forecast for a long enough date range
-# summary <- wide_frame_hosp %>% 
-#   select(model, forecast_date, target_end_date, horizon_week) %>%
-#   group_by(model) %>%
-#   summarise(n())
-# 
-# little_models <- summary %>%
-#   filter(`n()` == max(summary$`n()`)) %>% 
-#   #UCLA-SuEIR doesn't have all locations and was already eliminated
-#   pull(model)
-
-
-h_frame_high <- wide_frame_hosp %>% 
- # dplyr::filter(model %in% little_models) %>%
-  frame_format2()
-#%>% #must run code chunk below
-  #select(-little_models) # remove models that don't have enough forecasts
-
-
-#############
-library(ggplot2)
-base_data <- filter(wide_frame_hosp, location == "6", quantile == 0.05, horizon_week == 1)
-ggplot(base_data, aes(x = target_end_date, y = value, color = model)) + geom_point() + geom_line()
-
-check <- hosp_forecasts_high %>% 
-  filter(model == "UCLA-SuEIR") %>%
-  select(model, forecast_date, target_end_date, location, horizon_week) %>%
-  group_by(location) %>%
-  summarise(n())
-################
-
-
-# d_frame <- frame_format(wide_frame_death) 
-# c_frame <- frame_format(wide_frame_case) 
-## low count
-# wide_frame_death_low <- read.csv("./data/quantile_frame_bottom.csv") 
-# wide_frame_case_low <- read.csv("./data/quantile_frame_inc_bottom.csv") 
-# d_frame_low <- frame_format(wide_frame_death_low) 
-# c_frame_low <- frame_format(wide_frame_case_low) 
-
-```
-
-```{r}
 # rewrite frame_format() to work w/ hosp data
 frame_format2 <- function(zoltr_frame){
   n_locs <- length(unique(zoltr_frame$location))
@@ -129,10 +78,77 @@ frame_format2 <- function(zoltr_frame){
     dplyr::select_if(~ !any(is.na(.)))
   return(matrix_frame)
 } 
+```
 
+```{r}
+source("./functions/distance_func_script.R")
+# set targets for analysis
+target_horizon <- 1:4
+target_var <- "inc hosp"
+# each target will have different sets of models based on the current filtering
+## high count
+wide_frame_hosp <- read.csv("./data/quantile_frame_hosp_top.csv")
 
+h_frame_high <- wide_frame_hosp %>% 
+  frame_format2()
 
-  
+#############
+library(ggplot2)
+base_data <- filter(wide_frame_hosp, location == "6", quantile == 0.05, horizon_week == 1)
+ggplot(base_data, aes(x = target_end_date, y = value, color = model)) + geom_point() + geom_line()
+```
+
+```{r}
+scatter2 <- function(data,title_name,metadata=NULL){
+  if (is.null(metadata)) {
+    dat <- data %>% 
+      dplyr::mutate(Model=model_2) 
+    
+    ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model)) + 
+      geom_point(alpha=0.6,size=0.8) + 
+      geom_line(alpha=0.4) +
+      ggtitle(title_name) +
+      ylab("Approx. CD") +
+      xlab("Forecast End Date") +
+      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
+      theme(legend.text = element_text(size=5),
+            legend.title = element_text(size=7),
+            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            legend.key.size = unit(0.5, 'cm'))+
+      scale_x_date(date_breaks = "1 month",
+                   date_labels = "%m-%y")
+  } else {
+    dat <- data %>% 
+      dplyr::left_join(metadata,by=c("model_2"="model_abbr")) %>%
+      dplyr::mutate(Model=model_2) 
+    
+    dat$model_type <- ifelse(dat$ensemble, 
+                             "ensemble", 
+                             ifelse(dat$hybrid,
+                                    "hybrid",
+                                    ifelse(dat$stats,
+                                           "statistical",
+                                           ifelse(dat$agent_based,
+                                                  "agent-based",
+                                                  ifelse(dat$compartmental,
+                                                         "compartmental",
+                                                         "machine learning")))))
+    ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model,group=model_type)) + 
+      geom_point(alpha=0.6,size=0.8,aes(shape=model_type)) + 
+      geom_line(alpha=0.4) +
+      ggtitle(title_name) +
+      ylab("Approx. CD") +
+      xlab("Forecast End Date") +
+      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
+      theme(legend.text = element_text(size=5),
+            legend.title = element_text(size=7),
+            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            legend.key.size = unit(0.5, 'cm'))+
+      scale_x_date(date_breaks = "1 month",
+                   date_labels = "%m-%y")
+  }
+}
+
 ```
 
 
@@ -148,132 +164,6 @@ approx_cd_list_high <- build_distance_frame(h_frame_high,
                            approx_rule="trapezoid_riemann",
                            tau_F=q_set_high,tau_G=q_set_high)
 
-######## Scrapwork - trying to figure out why running the above code throws an error
-    q_F_ordered <- sort(q_F)
-    q_G_ordered <- sort(q_G)
-
-tar_loc <- main_frame %>%
-            dplyr::filter(location==unique(main_frame$location),
-                          target_variable=="inc death",
-                          horizon==c(1:4)) 
-            end_dates <- unique(tar_loc$target_end_date)
-          
- 
-single_matrix <- tar_loc %>%
-              dplyr::filter(target_end_date==end_dates) %>%
-              dplyr::arrange(quantile) %>%
-              cd_combination(., "trapezoid_riemann", q_set,q_set) %>%
-              dplyr::mutate(horizon=horiz,
-                            location=loc,
-                            target_variable=target,
-                            target_end_date=end_date)
-            rbind(dist_frame,single_matrix) -> dist_frame
-
-            
-             single_tarloc<- single_matrix[ , colSums(is.na(single_matrix)) == 0]    
-    tmp <- single_tarloc %>%
-    dplyr::select(-c("target_variable","target_end_date","location","horizon"))
-
-    is.numeric(unlist(tmp[,eg[1,2]]))
-    
-  nc <- ncol(tmp)
-  cnames <- colnames(tmp)
-  eg <- expand.grid(1:nc, 1:nc)
-  nr <- nrow(eg)
-  v <- vector(length=nr)
-  for (i in 1:nr) {
-    cc <- calc_cramers_dist_one_model_pair(as.numeric(unlist(tmp[,eg[i,1]])),
-                                           q_set_high,
-                                           as.numeric(unlist(tmp[,eg[i,2]])),
-                                           q_set_high,
-                                           "trapezoid_riemann")
-    v[i] <- cc
-  } 
-  
-  q_F_ordered <- sort((unlist(tmp[,eg[i,1]])))
-  tau_F_ordered <- sort(q_set_high)
-  
-  
-#  calc_cramers_dist_unequal_space <-
- # function(q_F, tau_F, q_G, tau_G, approx_rule) {
-  approx_rule = "trapezoid_riemann"
-    # check quantile order
-    q_F_ordered <- sort(as.numeric(unlist(tmp[,eg[1:9,1]])))
-    q_G_ordered <- sort(as.numeric(unlist(tmp[,eg[1:9,2]])))
- 
-    # check probability level order
-    tau_F_ordered <- sort(q_set_high)
-    tau_G_ordered <- sort(q_set_high)
-
-    N <- length(q_F_ordered)
-    M <- length(q_G_ordered)
-    # pool quantiles:
-    q0 <- c(q_F_ordered, q_G_ordered)
-    # indicator whether the entry is from F or G
-    q <- q0[order(q0)]
-    tf <- unlist(sapply(q, function(x) ifelse(x %in% q_F_ordered,tau_F_ordered[which(x == q_F_ordered)],0)))
-    tg <- unlist(sapply(q, function(x) ifelse(x %in% q_G_ordered,tau_G_ordered[which(x == q_G_ordered)],0)))
-    diffs_q <- diff(q)
-    # probability level vectors
-    tau_F_v <- cummax(tf)
-    tau_G_v <- cummax(tg)
-    if (approx_rule == "left_sided_riemann") {
-      cvm <-
-        sum(((tau_F_v[1:(N + M) - 1] - tau_G_v[1:(N + M) - 1]) ^ 2) * diffs_q)
-    } else if (approx_rule == "trapezoid_riemann") {
-      cvm <-
-        sum((((tau_F_v[1:(N + M) - 1] - tau_G_v[1:(N + M) - 1]) ^ 2 + (tau_F_v[2:(N +
-                                                                                       M)] - tau_G_v[2:(N + M)]) ^ 2
-        ) / 2) * diffs_q)
-    }
-cvm
-
-
-#explore build_distance_frame()----------------------------------------------------#
-#(model_dataframe, horizon_list,target_list, approx_rule,tau_F,tau_G)
-  main_frame <- d_frame %>% 
-      dplyr::mutate(horizon = as.numeric(as.character(horizon)),
-                    target_variable = as.character(target_variable),
-                    location = as.character(location), 
-                    target_end_date = as.Date(target_end_date)) %>%
-      dplyr::filter(target_variable %in% "inc death",
-                    horizon %in% c(1:4)) 
-  if("forecast_date" %in% c(colnames(main_frame))){
-    main_frame <- main_frame %>%
-      dplyr::select(-"forecast_date")
-  }
-  ## apply distance_combination function 
-  locations <- unique(main_frame$location)
-  dist_frame <- data.frame()
-  for(loc in locations){
-      for(target in "inc hosp"){
-        for(horiz in c(1:4)){
-          tar_loc <- main_frame %>%
-            dplyr::filter(location==loc,
-                          target_variable==target,
-                          horizon==horiz) 
-          end_dates <- unique(tar_loc$target_end_date)
-          for(end_date in end_dates){
-            single_matrix <- tar_loc %>%
-              dplyr::filter(target_end_date==end_date) %>%
-              dplyr::arrange(quantile) %>%
-              cd_combination(., "trapezoid_riemann", q_set_high,q_set_high) %>%
-              dplyr::mutate(horizon=horiz,
-                            location=loc,
-                            target_variable=target,
-                            target_end_date=end_date)
-            rbind(dist_frame,single_matrix) -> dist_frame
-          }
-        }
-      }
-  }
-#-----------------------------------------------------------------------------------#
-
-  
-```
-
-```{r}
-
   
 # extract data
 total_frame <- approx_cd_list_high[[1]] %>%
@@ -281,21 +171,21 @@ total_frame <- approx_cd_list_high[[1]] %>%
 total_frame$target_end_date <- as.Date(total_frame$target_end_date,origin="1970-01-01")
 
 # build some data frame
-for(loc in loc_name$location){
-  tmp <- approx_cd_list[[2]] %>% 
+for(loc in loc_name_high$location){
+  tmp <- approx_cd_list_high[[2]] %>% 
     dplyr::filter(location==loc) 
   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
   assign(paste0("d_frame_loc",loc), tmp_list)
 }
 
 # build heatmaps and scatter plots
-for(loc in loc_name$location){
-    tmp <- approx_cd_list[[2]] %>%
+for(loc in loc_name_high$location){
+    tmp <- approx_cd_list_high[[2]] %>%
     dplyr::filter(location==loc)
     assign(paste0("p_",loc),
       distance_heatmap(tmp,
-                       paste0(loc_name$abbreviation[which(loc_name$location==loc)],
-                                "- Mean Approx. CD - Inc Death Forecasts by Horizon")))
+                       paste0(loc_name_high$abbreviation[which(loc_name_high$location==loc)],
+                                "- Mean Approx. CD - Inc Hosp Forecasts by Horizon")))
       tmp <-total_frame %>%
           dplyr::filter(location==loc) %>%
           dplyr::group_by(horizon,target_end_date) %>%
@@ -303,19 +193,18 @@ for(loc in loc_name$location){
                         model_2 != "COVIDhub-ensemble") %>%
           dplyr:: ungroup()
       assign(paste0("t_",loc),
-             scatter(tmp,
+             scatter2(tmp,
             paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
-                loc_name$abbreviation[which(loc_name$location==loc)]) )
+                loc_name_high$abbreviation[which(loc_name_high$location==loc)]) )
     )
 }
 ```
-
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
 ```{r,fig.align='center'}
 # print heatmapes
-for(loc in loc_name$location){
+for(loc in loc_name_high$location){
   print(do.call(get,list(paste0("p_",loc))))
 }
 ```
@@ -324,7 +213,7 @@ We can also look at the approximated pairwise distances to see how the models be
 
 ```{r,fig.align='center'}
 # print scatterplots
-for(loc in loc_name$location){
+for(loc in loc_name_high$location){
   print(do.call(get,list(paste0("t_",loc))))
 }
 ```
@@ -337,9 +226,9 @@ for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
     ggdendrogram(
-      hclust(as.dist(get(paste0("d_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
+      hclust(as.dist(get(paste0("d_frame_loc",loc_name_high$location[j]))[[i]]), method = "ward.D", members = NULL)
       ,size = 2) +
-      labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name$abbreviation[j]))+
+      labs(title=paste0("Dendrogram - ",i, " wk ahead inc hosp - ",loc_name_high$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
       theme(axis.text.x = element_text(size=5),
