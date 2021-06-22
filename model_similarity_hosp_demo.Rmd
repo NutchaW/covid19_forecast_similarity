@@ -49,22 +49,23 @@ target_var <- "inc hosp"
 ## high count
 wide_frame_hosp <- read.csv("./data/quantile_frame_hosp_top.csv")
 
-# find models that don't forecast for a long enough date range
-summary <- wide_frame_hosp %>% 
-  filter(location == "6", quantile == 0.05, horizon_week == 1) %>%
-  select(model, forecast_date, target_end_date, horizon_week) %>%
-  group_by(model) %>%
-  summarise(n())
-
-little_models <- summary %>%
-  filter(`n()` < 20, model != "UCLA-SuEIR") %>% 
-  #UCLA-SuEIR doesn't have all locations and was already eliminated
-  pull(model)
+# # find models that don't forecast for a long enough date range
+# summary <- wide_frame_hosp %>% 
+#   select(model, forecast_date, target_end_date, horizon_week) %>%
+#   group_by(model) %>%
+#   summarise(n())
+# 
+# little_models <- summary %>%
+#   filter(`n()` == max(summary$`n()`)) %>% 
+#   #UCLA-SuEIR doesn't have all locations and was already eliminated
+#   pull(model)
 
 
 h_frame_high <- wide_frame_hosp %>% 
-  frame_format2() %>% #must run code chunk below
-  select(-little_models) # remove models that don't have enough forecasts
+ # dplyr::filter(model %in% little_models) %>%
+  frame_format2()
+#%>% #must run code chunk below
+  #select(-little_models) # remove models that don't have enough forecasts
 
 
 #############
@@ -105,18 +106,18 @@ frame_format2 <- function(zoltr_frame){
     dplyr::filter(n_q==max(n_q)) %>%
     dplyr::select(-"n_q") %>%
     # start filtering date and location and horizon
-    group_by(model, horizon,  target_end_date) %>% #Add count of locations
+    group_by(model, horizon_week,  target_end_date) %>% #Add count of locations
     mutate(n_locations = n_distinct(location)) %>%
     dplyr::filter(n_locations==n_locs) %>%
     ungroup()  %>%
     group_by(model, location, target_end_date) %>% #Add count of weeks
     dplyr::mutate(n_horizons = n_distinct(horizon_week)) %>%
+    ungroup() %>%
     dplyr::filter(n_horizons==max(n_horizons)) %>%
-    ungroup() %>%
-    group_by(model, horizon, location) %>%
+    group_by(model, horizon_week, location) %>%
     mutate(n_dates = n_distinct(target_end_date)) %>%
-    dplyr::filter(n_dates==max(n_dates)) %>%
     ungroup() %>%
+    dplyr::filter(n_dates==max(n_dates)) %>%
     dplyr::select(-c("n_horizons","n_locations","n_dates"))
   # final clean-up
   matrix_frame <- formatted_frame %>%
