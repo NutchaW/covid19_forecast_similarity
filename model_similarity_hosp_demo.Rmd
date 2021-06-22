@@ -87,15 +87,10 @@ target_horizon <- 1:4
 target_var <- "inc hosp"
 # each target will have different sets of models based on the current filtering
 ## high count
-wide_frame_hosp <- read.csv("./data/quantile_frame_hosp_top.csv")
+wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv")
 
-h_frame_high <- wide_frame_hosp %>% 
+h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
-
-#############
-library(ggplot2)
-base_data <- filter(wide_frame_hosp, location == "6", quantile == 0.05, horizon_week == 1)
-ggplot(base_data, aes(x = target_end_date, y = value, color = model)) + geom_point() + geom_line()
 ```
 
 ```{r}
@@ -155,7 +150,7 @@ scatter2 <- function(data,title_name,metadata=NULL){
 
 ```{r}
 # hosp forecast
-loc_name_high <-  unique(wide_frame_hosp[,c("abbreviation","location")])
+loc_name_high <-  unique(wide_frame_hosp_high[,c("abbreviation","location")])
 # calculate distance matrices
 q_set_high <- unique(h_frame_high$quantile) 
 approx_cd_list_high <- build_distance_frame(h_frame_high, 
@@ -166,16 +161,16 @@ approx_cd_list_high <- build_distance_frame(h_frame_high,
 
   
 # extract data
-total_frame <- approx_cd_list_high[[1]] %>%
+total_frame_high <- approx_cd_list_high[[1]] %>%
   dplyr::mutate(pair=paste(model_1,model_2,sep=" vs "))
-total_frame$target_end_date <- as.Date(total_frame$target_end_date,origin="1970-01-01")
+total_frame_high$target_end_date <- as.Date(total_frame_high$target_end_date,origin="1970-01-01")
 
 # build some data frame
 for(loc in loc_name_high$location){
   tmp <- approx_cd_list_high[[2]] %>% 
     dplyr::filter(location==loc) 
   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
-  assign(paste0("d_frame_loc",loc), tmp_list)
+  assign(paste0("h_frame_loc",loc), tmp_list)
 }
 
 # build heatmaps and scatter plots
@@ -186,7 +181,7 @@ for(loc in loc_name_high$location){
       distance_heatmap(tmp,
                        paste0(loc_name_high$abbreviation[which(loc_name_high$location==loc)],
                                 "- Mean Approx. CD - Inc Hosp Forecasts by Horizon")))
-      tmp <-total_frame %>%
+      tmp <-total_frame_high %>%
           dplyr::filter(location==loc) %>%
           dplyr::group_by(horizon,target_end_date) %>%
           dplyr::filter(model_1 =="COVIDhub-ensemble",
@@ -199,6 +194,7 @@ for(loc in loc_name_high$location){
     )
 }
 ```
+
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
@@ -226,7 +222,7 @@ for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
     ggdendrogram(
-      hclust(as.dist(get(paste0("d_frame_loc",loc_name_high$location[j]))[[i]]), method = "ward.D", members = NULL)
+      hclust(as.dist(get(paste0("h_frame_loc",loc_name_high$location[j]))[[i]]), method = "ward.D", members = NULL)
       ,size = 2) +
       labs(title=paste0("Dendrogram - ",i, " wk ahead inc hosp - ",loc_name_high$abbreviation[j]))+
       xlab("") +
@@ -242,50 +238,57 @@ for(i in 1:4){
 
 ## 5 locations with the lowest number of COVID-19 deaths by the end of February 2021
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the lowest number of COVID-19 deaths by the end of February 2021, all probability levels, from the target end date of October, 17th 2020 to May 29th, 2021 .
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the lowest number of COVID-19 deaths by the end of February 2021, all probability levels, from the target end date of December, 17th 2020 to June 10th, 2021 .
+
 
 ```{r}
-# death forecast
-loc_name <-  unique(wide_frame_death_low[,c("abbreviation","location")])
+# low count
+wide_frame_hosp_low <- read.csv("./data/quantile_frame_hosp_bottom.csv")
+
+h_frame_low <- wide_frame_hosp_low %>% 
+  frame_format2()
+
+
+loc_name_low <-  unique(wide_frame_hosp_low[,c("abbreviation","location")])
 # calculate distance matrices
-q_set <- unique(d_frame_low$quantile) 
-approx_cd_list <- build_distance_frame(d_frame_low, 
+q_set_low <- unique(h_frame_low$quantile) 
+approx_cd_list_low <- build_distance_frame(h_frame_low, 
                            horizon_list=c(1:4),
-                           target_list="inc death",
+                           target_list="inc hosp",
                            approx_rule="trapezoid_riemann",
-                           tau_F=q_set,tau_G=q_set)
+                           tau_F=q_set_low,tau_G=q_set_low)
 
 # extract data
-total_frame <- approx_cd_list[[1]] %>%
+total_frame_low <- approx_cd_list_low[[1]] %>%
   dplyr::mutate(pair=paste(model_1,model_2,sep=" vs "))
-total_frame$target_end_date <- as.Date(total_frame$target_end_date,origin="1970-01-01")
+total_frame_low$target_end_date <- as.Date(total_frame_low$target_end_date,origin="1970-01-01")
 
 # build some data frame
-for(loc in loc_name$location){
-  tmp <- approx_cd_list[[2]] %>% 
+for(loc in loc_name_low$location){
+  tmp <- approx_cd_list_low[[2]] %>% 
     dplyr::filter(location==loc) 
   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
-  assign(paste0("d_frame_loc",loc), tmp_list)
+  assign(paste0("h_frame_loc",loc), tmp_list)
 }
 
 # build heatmaps and scatter plots
-for(loc in loc_name$location){
-    tmp <- approx_cd_list[[2]] %>%
+for(loc in loc_name_low$location){
+    tmp <- approx_cd_list_low[[2]] %>%
     dplyr::filter(location==loc)
     assign(paste0("p_",loc),
       distance_heatmap(tmp,
-                       paste0(loc_name$abbreviation[which(loc_name$location==loc)],
-                                "- Mean Approx. CD - Inc Death Forecasts by Horizon")))
-      tmp <-total_frame %>%
+                       paste0(loc_name_low$abbreviation[which(loc_name_low$location==loc)],
+                                "- Mean Approx. CD - Inc Hosp Forecasts by Horizon")))
+      tmp <-total_frame_low %>%
           dplyr::filter(location==loc) %>%
           dplyr::group_by(horizon,target_end_date) %>%
           dplyr::filter(model_1 =="COVIDhub-ensemble",
                         model_2 != "COVIDhub-ensemble") %>%
           dplyr:: ungroup()
       assign(paste0("t_",loc),
-             scatter(tmp,
+             scatter2(tmp,
             paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
-                loc_name$abbreviation[which(loc_name$location==loc)]) )
+                loc_name_low$abbreviation[which(loc_name_low$location==loc)]) )
     )
 }
 ```
@@ -294,7 +297,7 @@ We can visualize the mean approximated pairwise distances across all time points
 
 ```{r,fig.align='center'}
 # print heatmapes
-for(loc in loc_name$location){
+for(loc in loc_name_low$location){
   print(do.call(get,list(paste0("p_",loc))))
 }
 ```
@@ -303,7 +306,7 @@ We can also look at the approximated pairwise distances to see how the models be
 
 ```{r,fig.align='center'}
 # print scatterplots
-for(loc in loc_name$location){
+for(loc in loc_name_low$location){
   print(do.call(get,list(paste0("t_",loc))))
 }
 ```
@@ -316,9 +319,9 @@ for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
     ggdendrogram(
-      hclust(as.dist(get(paste0("d_frame_loc",loc_name$location[j]))[[i]]), method = "ward.D", members = NULL)
+      hclust(as.dist(get(paste0("h_frame_loc",loc_name_low$location[j]))[[i]]), method = "ward.D", members = NULL)
       ,size = 2) +
-      labs(title=paste0("Dendrogram - ",i, " wk ahead inc death - ",loc_name$abbreviation[j]))+
+      labs(title=paste0("Dendrogram - ",i, " wk ahead inc hosp - ",loc_name_low$abbreviation[j]))+
       xlab("") +
       ylab("Mean Cramer's Distance") +
       theme(axis.text.x = element_text(size=5),
