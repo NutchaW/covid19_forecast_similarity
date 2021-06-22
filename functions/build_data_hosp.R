@@ -37,18 +37,10 @@ hosp_truth <- load_truth("HealthData", #note this is the only source available
 hlocs_high <- hosp_truth$location[1:5]
 
 
-hosp_truth_low <- hosp_truth %>%
-  dplyr::arrange(cum_hosp) %>%
-  dplyr::filter(as.numeric(location)<60)
-
-hlocs_low <- hosp_truth_low$location[1:5]
-
-
 # run to build
 hosp_forecasts_high <- map_dfr(date_range,
                  function(x) {
-                  covidHubUtils::load_latest_forecasts(
-                                                        last_forecast_date = x,
+                   covidHubUtils::load_latest_forecasts(last_forecast_date = x,
                                                         forecast_date_window_size=6,
                                                         # pick one
                                                         locations = hlocs_high,
@@ -71,6 +63,12 @@ hosp_forecasts_high <- hosp_forecasts_high %>%
 write_csv(hosp_forecasts_high,file = "./data/quantile_frame_hosp_top.csv")
 
 
+## --------- Low -------------------------------------------------##
+hosp_truth_low <- hosp_truth %>%
+  dplyr::arrange(cum_hosp) %>%
+  dplyr::filter(as.numeric(location)<60)
+
+hlocs_low <- hosp_truth_low$location[1:5]
 
 # run to build
 hosp_forecasts_low <- map_dfr(date_range,
@@ -86,27 +84,7 @@ hosp_forecasts_low <- map_dfr(date_range,
                                })
 
 
-for(i in 1:4){
-  assign(paste0("quantile_frame3_",i),
-         map_dfr(get(paste0("latest_pos_forecast_date_",i,"wk")),
-                 function(fdates) {
-                   covidHubUtils::load_latest_forecasts(last_forecast_date = fdates,
-                                                        forecast_date_window_size=6,
-                                                        locations = clocs,
-                                                        types = "quantile",
-                                                        targets = target_list2[i],
-                                                        source = "zoltar")})
-  )
-}
-
-
-write_csv(rbind(quantile_frame2_1,
-                quantile_frame2_2,
-                quantile_frame2_3,
-                quantile_frame2_4),file = "./data/quantile_frame_inc.csv")
-
 #create new col to make division of forecasts - by "week" (7 days of forecasts grouped together)
-
 hosp_forecasts_low <- hosp_forecasts_low %>%
   dplyr::filter(weekdays(`target_end_date`) == weekdays(most_recent_end_date)) %>%
   dplyr::mutate(horizon_week = case_when(
@@ -118,7 +96,7 @@ hosp_forecasts_low <- hosp_forecasts_low %>%
                   
 
 # write large files
-write_csv(hosp_forecasts_filtered,file = "./data/quantile_frame_hosp_bottom.csv")
+write_csv(hosp_forecasts_low,file = "./data/quantile_frame_hosp_bottom.csv")
 
 
 ######################################### smaller toy data set to play around with
