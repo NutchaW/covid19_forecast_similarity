@@ -1,7 +1,7 @@
 ---
 title: "Forecast Similarity Using Cramer Distance Approximation"
 author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit"
-date: "05/28/2021"
+date: "06/24/2021"
 header-includes:
    - \usepackage{amsmath}
    - \usepackage{tabularx}

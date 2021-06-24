@@ -1,0 +1,568 @@
+---
+title: "Forecasting Model Similarity"
+author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit, Li Shandross"
+date: "06/24/2021"
+header-includes:
+   - \usepackage{tabularx}
+   - \usepackage{hyperref}
+   - \usepackage{wrapfig}
+   - \usepackage{float}
+   - \usepackage{colortbl}
+   - \usepackage{pdflscape}
+   - \usepackage{tabu}
+   - \usepackage{xcolor}
+output:
+  pdf_document:
+        latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(energy)
+library(knitr)
+library(data.table)
+library(covidHubUtils)
+library(RColorBrewer)
+#devtools::install_github("reichlab/covidHubUtils")
+library(lubridate)
+library(zoltr)
+library(igraph)
+library(gtools)
+library(gridExtra)
+library(ggdendro)
+knitr::opts_chunk$set(echo=FALSE,
+                       comment = FALSE, message=FALSE, fig.show= 'hold',fig.pos="H",table.placement='H',
+                       fig.align = 'center',warning = FALSE)
+```
+
+
+# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Death 
+
+## 5 locations with the highest number of COVID-19 deaths by the end of February 2021
+
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 deaths by the end of February 2021, all probability levels, from the target end date of October, 17th 2020 to May 29th, 2021 .
+
+```{r}
+source("./functions/distance_func_script.R")
+# set targets for analysis
+target_horizon <- 1:4
+target_var <- c("inc death","inc case")
+# read in model metadata
+metadata <- read.csv("./metadata_categorized.csv") 
+metadata$stats[which(metadata$team_name == "Karlen Working Group")] <- TRUE
+metadata$compartmental[which(metadata$team_name == "Robert Walraven")] <- FALSE
+metadata$JHU_data[which(metadata$team_name == "COVID-19 Forecast Hub")] <- TRUE
+metadata$ensemble <- ifelse(metadata$ensemble==TRUE,1,0)
+metadata$compartmental <- ifelse(metadata$compartmental==TRUE,1,0)
+metadata$stats <- ifelse(metadata$stats==TRUE,1,0)
+# manual change 
+# add text columns
+metadata$model_type <- ifelse(metadata$ensemble, 
+                                  "ensemble", 
+                                  ifelse(metadata$stats + metadata$compartmental==2,
+                                         "both stats and mech",
+                                         ifelse((metadata$stats*2)+metadata$compartmental==2,
+                                                "statistical",
+                                                ifelse((metadata$stats*2)+metadata$compartmental==1,
+                                                       "mechanistic",
+                                                       "neither stats nor mech"))))
+metadata$data_source <- ifelse(metadata$JHU_data,"JHU","unspecified")
+
+# each target will have different sets of models based on the current filtering
+## high count
+wide_frame_death <- read.csv("./data/quantile_frame.csv") %>%
+  dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
+wide_frame_case <- read.csv("./data/quantile_frame_inc.csv") %>%
+  dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
+d_frame <- frame_format(wide_frame_death) 
+c_frame <- frame_format(wide_frame_case) 
+# model type
+d_meta <- colnames(d_frame)[-c(1:6)]
+c_meta <- colnames(c_frame)[-c(1:6)]
+## low count
+wide_frame_death_low <- read.csv("./data/quantile_frame_bottom.csv") %>%
+  dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
+wide_frame_case_low <- read.csv("./data/quantile_frame_inc_bottom.csv") %>%
+  dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
+d_frame_low <- frame_format(wide_frame_death_low) 
+c_frame_low <- frame_format(wide_frame_case_low) 
+# model type
+d_meta_low <- colnames(d_frame_low)[-c(1:6)]
+c_meta_low <- colnames(c_frame_low)[-c(1:6)]
+```
+
+
+```{r}
+# high count death forecast
+loc_name <-  unique(wide_frame_death[,c("abbreviation","location")])
+d_metadata <- metadata %>%
+  dplyr::filter(model_abbr %in% d_meta)
+recent_dmeta <- d_metadata %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
+short_meta <- recent_dmeta[,c(3,ncol(recent_dmeta)-1)]
+short_data <- recent_dmeta[,c(3,ncol(recent_dmeta))]
+# calculate distance matrices
+q_set <- unique(d_frame$quantile) 
+approx_cd_list <- build_distance_frame(d_frame, 
+                           horizon_list=c(1:4),
+                           target_list="inc death",
+                           approx_rule="trapezoid_riemann",
+                           tau_F=q_set,tau_G=q_set)
+
+approx_cd_list2 <- build_distance_frame(d_frame, 
+                                        horizon_list=c(1:4),
+                                        target_list="inc death",
+                                        approx_rule="approximation2",
+                                        tau_F=q_set,tau_G=q_set)
+# extract data
+total_frame <- approx_cd_list[[1]] %>%
+  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
+  dplyr::group_by(horizon,target_variable,target_end_date,pair) %>%
+  dplyr::mutate(mean_approx_cd=mean(approx_cd)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-c("approx_cd","location")) %>%
+  dplyr::distinct()
+total_frame$target_end_date <- as.Date(total_frame$target_end_date,origin="1970-01-01")
+
+# build some data frame
+# for(loc in loc_name$location){
+#   tmp <- approx_cd_list[[2]] %>% 
+#     dplyr::filter(location==loc) 
+#   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
+#   assign(paste0("d_frame_loc",loc), tmp_list)
+# }
+d_frame_mean <- lapply(1:4, function(x) cd_matrix(approx_cd_list[[3]],x))
+
+# build heatmaps and scatter plots
+#for(loc in loc_name$location){
+    # tmp <- approx_cd_list[[2]] %>%
+    # dplyr::filter(location==loc)
+    # assign(paste0("p_",loc),
+    #   suppressWarnings(distance_heatmap(tmp,
+    #                    paste0(loc_name$abbreviation[which(loc_name$location==loc)],
+    #                             "- Mean Approx. CD - Inc Death Forecasts by Horizon"),recent_dmeta)))
+    #   tmp <-total_frame %>%
+    #       dplyr::filter(location==loc) %>%
+    #       dplyr::group_by(horizon,target_end_date) %>%
+    #       dplyr::filter(model_1 =="COVIDhub-ensemble",
+    #                     model_2 != "COVIDhub-ensemble") %>%
+    #       dplyr:: ungroup()
+    #   assign(paste0("t_",loc),
+    #          scatter(tmp,
+    #         paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
+    #             loc_name$abbreviation[which(loc_name$location==loc)]),recent_dmeta)
+    # )
+#}
+# make data for box plot
+newdf <- approx_cd_list[[3]][,c(1:3)] %>%
+  rowwise() %>%
+  dplyr::mutate(h=ifelse(horizon==1,"a",ifelse(horizon==2,"b",ifelse(horizon==3,"c","d")))) %>%
+  dplyr::select(-"horizon")
+for (i in 1:nrow(approx_cd_list[[3]])){
+    newdf[i, ] = sort(newdf[i,c(1:3)])
+}
+pair_data <- approx_cd_list[[3]] %>%
+  dplyr::left_join(short_meta,by=c("model_1"="model_abbr")) %>%
+  dplyr::left_join(short_meta,by=c("model_2"="model_abbr")) %>%
+  dplyr::rename(model1_type=model_type.x,
+                model2_type=model_type.y) %>%
+  rowwise() %>%
+  dplyr::mutate(stats_type=ifelse((model1_type== "statistical"&&model2_type== "statistical"),
+                                  "both statistical",
+                                  ifelse((model1_type== "statistical"|model2_type== "statistical"),
+                                  "one is statistical", "both not statistical")),
+                mech_type=ifelse((model1_type== "mechanistic" && model2_type== "mechanistic"),
+                                  "both mechanistic",
+                                  ifelse((model1_type== "mechanistic"|model2_type== "mechanistic"),
+                                  "one is mechanistic", "both not mechanistic"))) %>%
+  .[!duplicated(newdf),] %>%
+  dplyr::filter(model_1!=model_2)
+
+# low count death forecast
+loc_name_low <-  unique(wide_frame_death_low[,c("abbreviation","location")])
+d_metadata_low <- metadata %>%
+  dplyr::filter(model_abbr %in% d_meta_low)
+recent_dmeta_low <- d_metadata_low %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
+short_meta_low <- recent_dmeta_low[,c(3,ncol(recent_dmeta_low)-1)]
+short_data_low <- recent_dmeta_low[,c(3,ncol(recent_dmeta_low))]
+
+# calculate distance matrices
+approx_cd_list_low <- build_distance_frame(d_frame_low, 
+                           horizon_list=c(1:4),
+                           target_list="inc death",
+                           approx_rule="trapezoid_riemann",
+                           tau_F=q_set,tau_G=q_set)
+approx_cd_list2_low <- build_distance_frame(d_frame_low, 
+                                        horizon_list=c(1:4),
+                                        target_list="inc death",
+                                        approx_rule="approximation2",
+                                        tau_F=q_set,tau_G=q_set)
+# extract data
+total_frame_low <- approx_cd_list_low[[1]] %>%
+  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
+  dplyr::group_by(horizon,target_variable,target_end_date,pair) %>%
+  dplyr::mutate(mean_approx_cd=mean(approx_cd)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-c("approx_cd","location")) %>%
+  dplyr::distinct()
+total_frame_low$target_end_date <- as.Date(total_frame_low$target_end_date,origin="1970-01-01")
+
+d_frame_mean_low <- lapply(1:4, function(x) cd_matrix(approx_cd_list_low[[3]],x))
+
+newdf <- approx_cd_list_low[[3]][,c(1:3)] %>%
+  rowwise() %>%
+  dplyr::mutate(h=ifelse(horizon==1,"a",ifelse(horizon==2,"b",ifelse(horizon==3,"c","d")))) %>%
+  dplyr::select(-"horizon")
+for (i in 1:nrow(approx_cd_list_low[[3]])){
+    newdf[i, ] = sort(newdf[i,c(1:3)])
+}
+pair_data_low <- approx_cd_list_low[[3]] %>%
+  dplyr::left_join(short_meta_low,by=c("model_1"="model_abbr")) %>%
+  dplyr::left_join(short_meta_low,by=c("model_2"="model_abbr")) %>%
+  dplyr::rename(model1_type=model_type.x,
+                model2_type=model_type.y) %>%
+  rowwise() %>%
+  dplyr::mutate(stats_type=ifelse((model1_type== "statistical"&&model2_type== "statistical"),
+                                  "both statistical",
+                                  ifelse((model1_type== "statistical"|model2_type== "statistical"),
+                                  "one is statistical", "both not statistical")),
+                mech_type=ifelse((model1_type== "mechanistic" && model2_type== "mechanistic"),
+                                  "both mechanistic",
+                                  ifelse((model1_type== "mechanistic"|model2_type== "mechanistic"),
+                                  "one is mechanistic", "both not mechanistic"))) %>%
+  .[!duplicated(newdf),] %>%
+  dplyr::filter(model_1!=model_2)
+```
+
+```{r,fig.cap='Average approx. CD relative to the ensemble'}
+# print heatmapes
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+approx_cd_list[[3]] %>%
+  dplyr::left_join(approx_cd_list2[[3]], by=c("horizon","model_1","model_2","target_variable")) %>%
+  dplyr::filter(model_1=="COVIDhub-ensemble") %>%
+  dplyr::mutate(diff=mean_dis.x-mean_dis.y) %>%
+  dplyr::arrange(model_1,horizon,diff) %>%
+  knitr::kable(.,col.names=c("Anchor Model", "Model","Horizon","Target",
+                                     "Approx. CD uneq","Approx. CD eq","Difference"),digits=2)
+```
+
+```{r,fig.align='center'}
+# print heatmapes
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+distance_heatmap(approx_cd_list[[3]],
+                 "Mean Approx. CD of Inc Death Forecasts by Horizon - High Mortality Count Locations",
+                 recent_dmeta)
+distance_heatmap(approx_cd_list_low[[3]],
+                 "Mean Approx. CD of Inc Death Forecasts by Horizon - High Mortality Count Locations",
+                 recent_dmeta_low)
+```
+
+```{r,fig.align='center'}
+# print heatmapes
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+catbox_plot(pair_data)
+catbox_plot(pair_data_low)
+```
+
+We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
+
+We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
+
+```{r,fig.align='center'}
+# print scatterplots
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("t_",loc))))
+# }
+ot_data <- total_frame %>% 
+  dplyr::group_by(horizon,target_end_date) %>%
+  dplyr::filter(model_1 =="COVIDhub-ensemble",
+                model_2 != "COVIDhub-ensemble") %>%
+  dplyr:: ungroup() 
+ot_data_low <- total_frame_low %>% 
+  dplyr::group_by(horizon,target_end_date) %>%
+  dplyr::filter(model_1 =="COVIDhub-ensemble",
+                model_2 != "COVIDhub-ensemble") %>%
+  dplyr:: ungroup() 
+# scatter(ot_data,
+#         "Mean Approx. CD from COVIDhub-ensemble Over Time - \nHigh Mortality Count Locations",
+#         recent_dmeta)
+
+
+scatter(ot_data,
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nHigh Mortality Count Locations",
+        recent_dmeta,
+        smooth_tf = TRUE) 
+scatter(ot_data_low,
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nLow Mortality Count Locations",
+        recent_dmeta_low,
+        smooth_tf = TRUE) 
+```
+
+We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
+
+```{r,fig.cap="High Mortality Count Locations"}
+for(i in 1:4){
+    assign(paste0("dp_",i),
+           dendro_plot(i, "d_frame_mean",short_meta)
+             )
+    assign(paste0("dpd_",i),
+           dendro_plot(i, "d_frame_mean",short_data,FALSE)
+             )
+    assign(paste0("dpl_",i),
+           dendro_plot(i, "d_frame_mean_low",short_meta_low)
+             )
+    assign(paste0("dpdl_",i),
+           dendro_plot(i, "d_frame_mean_low",short_data_low,FALSE)
+             )
+  } 
+grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
+grid.arrange(dpd_1,dpd_2,dpd_3,dpd_4,nrow=2)
+```
+```{r,fig.cap="low Mortality Count Locations"}
+grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
+grid.arrange(dpdl_1,dpdl_2,dpdl_3,dpdl_4,nrow=2)
+```
+
+# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Case 
+
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all probability levels, from mid-October 2020 until May 24th,2021 for 5 locations with the highest cumulative cases.
+
+```{r}
+# high case forecast
+# high count death forecast
+loc_name <-  unique(wide_frame_case[,c("abbreviation","location")])
+c_metadata <- metadata %>%
+  dplyr::filter(model_abbr %in% c_meta)
+recent_cmeta <- c_metadata %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
+short_meta <- recent_cmeta[,c(3,ncol(recent_cmeta)-1)]
+short_data <- recent_cmeta[,c(3,ncol(recent_cmeta))]
+# calculate distance matrices
+q_set <- unique(c_frame$quantile) 
+approx_cd_list <- build_distance_frame(c_frame, 
+                           horizon_list=c(1:4),
+                           target_list="inc case",
+                           approx_rule="trapezoid_riemann",
+                           tau_F=q_set,tau_G=q_set)
+
+approx_cd_list2 <- build_distance_frame(c_frame, 
+                                        horizon_list=c(1:4),
+                                        target_list="inc case",
+                                        approx_rule="approximation2",
+                                        tau_F=q_set,tau_G=q_set)
+# extract data
+total_frame <- approx_cd_list[[1]] %>%
+  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
+  dplyr::group_by(horizon,target_variable,target_end_date,pair) %>%
+  dplyr::mutate(mean_approx_cd=mean(approx_cd)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-c("approx_cd","location")) %>%
+  dplyr::distinct()
+total_frame$target_end_date <- as.Date(total_frame$target_end_date,origin="1970-01-01")
+
+c_frame_mean <- lapply(1:4, function(x) cd_matrix(approx_cd_list[[3]],x))
+
+# make data for box plot
+newdf <- approx_cd_list[[3]][,c(1:3)] %>%
+  rowwise() %>%
+  dplyr::mutate(h=ifelse(horizon==1,"a",ifelse(horizon==2,"b",ifelse(horizon==3,"c","d")))) %>%
+  dplyr::select(-"horizon")
+for (i in 1:nrow(approx_cd_list[[3]])){
+    newdf[i, ] = sort(newdf[i,c(1:3)])
+}
+pair_data <- approx_cd_list[[3]] %>%
+  dplyr::left_join(short_meta,by=c("model_1"="model_abbr")) %>%
+  dplyr::left_join(short_meta,by=c("model_2"="model_abbr")) %>%
+  dplyr::rename(model1_type=model_type.x,
+                model2_type=model_type.y) %>%
+  rowwise() %>%
+  dplyr::mutate(stats_type=ifelse((model1_type== "statistical"&&model2_type== "statistical"),
+                                  "both statistical",
+                                  ifelse((model1_type== "statistical"|model2_type== "statistical"),
+                                  "one is statistical", "both not statistical")),
+                mech_type=ifelse((model1_type== "mechanistic" && model2_type== "mechanistic"),
+                                  "both mechanistic",
+                                  ifelse((model1_type== "mechanistic"|model2_type== "mechanistic"),
+                                  "one is mechanistic", "both not mechanistic"))) %>%
+  .[!duplicated(newdf),] %>%
+  dplyr::filter(model_1!=model_2)
+
+# low count case forecast
+loc_name_low <-  unique(wide_frame_case_low[,c("abbreviation","location")])
+c_metadata_low <- metadata %>%
+  dplyr::filter(model_abbr %in% c_meta_low)
+recent_cmeta_low <- c_metadata_low %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
+short_meta_low <- recent_cmeta_low[,c(3,ncol(recent_cmeta_low)-1)]
+short_data_low <- recent_cmeta_low[,c(3,ncol(recent_cmeta_low))]
+
+# calculate distance matrices
+approx_cd_list_low <- build_distance_frame(c_frame_low, 
+                           horizon_list=c(1:4),
+                           target_list="inc case",
+                           approx_rule="trapezoid_riemann",
+                           tau_F=q_set,tau_G=q_set)
+approx_cd_list2_low <- build_distance_frame(c_frame_low, 
+                                        horizon_list=c(1:4),
+                                        target_list="inc case",
+                                        approx_rule="approximation2",
+                                        tau_F=q_set,tau_G=q_set)
+# extract data
+total_frame_low <- approx_cd_list_low[[1]] %>%
+  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
+  dplyr::group_by(horizon,target_variable,target_end_date,pair) %>%
+  dplyr::mutate(mean_approx_cd=mean(approx_cd)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-c("approx_cd","location")) %>%
+  dplyr::distinct()
+total_frame_low$target_end_date <- as.Date(total_frame_low$target_end_date,origin="1970-01-01")
+
+c_frame_mean_low <- lapply(1:4, function(x) cd_matrix(approx_cd_list_low[[3]],x))
+
+newdf <- approx_cd_list_low[[3]][,c(1:3)] %>%
+  rowwise() %>%
+  dplyr::mutate(h=ifelse(horizon==1,"a",ifelse(horizon==2,"b",ifelse(horizon==3,"c","d")))) %>%
+  dplyr::select(-"horizon")
+for (i in 1:nrow(approx_cd_list_low[[3]])){
+    newdf[i, ] = sort(newdf[i,c(1:3)])
+}
+pair_data_low <- approx_cd_list_low[[3]] %>%
+  dplyr::left_join(short_meta_low,by=c("model_1"="model_abbr")) %>%
+  dplyr::left_join(short_meta_low,by=c("model_2"="model_abbr")) %>%
+  dplyr::rename(model1_type=model_type.x,
+                model2_type=model_type.y) %>%
+  rowwise() %>%
+  dplyr::mutate(stats_type=ifelse((model1_type== "statistical"&&model2_type== "statistical"),
+                                  "both statistical",
+                                  ifelse((model1_type== "statistical"|model2_type== "statistical"),
+                                  "one is statistical", "both not statistical")),
+                mech_type=ifelse((model1_type== "mechanistic" && model2_type== "mechanistic"),
+                                  "both mechanistic",
+                                  ifelse((model1_type== "mechanistic"|model2_type== "mechanistic"),
+                                  "one is mechanistic", "both not mechanistic"))) %>%
+  .[!duplicated(newdf),] %>%
+  dplyr::filter(model_1!=model_2)
+```
+
+```{r,fig.cap='Average approx. CD relative to the ensemble'}
+# print heatmapes
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+approx_cd_list[[3]] %>%
+  dplyr::left_join(approx_cd_list2[[3]], by=c("horizon","model_1","model_2","target_variable")) %>%
+  dplyr::filter(model_1=="COVIDhub-ensemble") %>%
+  dplyr::mutate(diff=mean_dis.x-mean_dis.y) %>%
+  dplyr::arrange(model_1,horizon,diff) %>%
+  knitr::kable(.,col.names=c("Anchor Model", "Model","Horizon","Target",
+                                     "Approx. CD uneq","Approx. CD eq","Difference"),digits=2)
+```
+
+```{r,fig.align='center'}
+# print heatmapes
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+distance_heatmap(approx_cd_list[[3]],
+                 "Mean Approx. CD of Inc Case Forecasts by Horizon - High Case Count Locations",
+                 recent_cmeta)
+distance_heatmap(approx_cd_list_low[[3]],
+                 "Mean Approx. CD of Inc Case Forecasts by Horizon - Low Case Count Locations",
+                 recent_cmeta_low)
+```
+
+```{r,fig.align='center'}
+# print heatmapes
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+catbox_plot(pair_data)
+catbox_plot(pair_data_low)
+```
+
+We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
+
+We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
+
+```{r,fig.align='center'}
+# print scatterplots
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("t_",loc))))
+# }
+ot_data <- total_frame %>% 
+  dplyr::group_by(horizon,target_end_date) %>%
+  dplyr::filter(model_1 =="COVIDhub-ensemble",
+                model_2 != "COVIDhub-ensemble") %>%
+  dplyr:: ungroup() 
+ot_data_low <- total_frame_low %>% 
+  dplyr::group_by(horizon,target_end_date) %>%
+  dplyr::filter(model_1 =="COVIDhub-ensemble",
+                model_2 != "COVIDhub-ensemble") %>%
+  dplyr:: ungroup() 
+# scatter(ot_data,
+#         "Mean Approx. CD from COVIDhub-ensemble Over Time - \nHigh Mortality Count Locations",
+#         recent_dmeta)
+
+
+scatter(ot_data,
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nHigh Mortality Count Locations",
+        recent_cmeta,
+        smooth_tf = TRUE) 
+scatter(ot_data_low,
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nLow Mortality Count Locations",
+        recent_cmeta_low,
+        smooth_tf = TRUE) 
+```
+
+We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
+
+```{r,fig.cap="High Case Count Locations"}
+for(i in 1:4){
+    assign(paste0("dp_",i),
+           dendro_plot(i, "c_frame_mean",short_meta)
+             )
+    assign(paste0("dpd_",i),
+           dendro_plot(i, "c_frame_mean",short_data,FALSE)
+             )
+    assign(paste0("dpl_",i),
+           dendro_plot(i, "c_frame_mean_low",short_meta_low)
+             )
+    assign(paste0("dpdl_",i),
+           dendro_plot(i, "c_frame_mean_low",short_data_low,FALSE)
+             )
+  } 
+grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
+grid.arrange(dpd_1,dpd_2,dpd_3,dpd_4,nrow=2)
+```
+
+```{r,fig.cap="Low CaseCount Locations"}
+grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
+grid.arrange(dpdl_1,dpdl_2,dpdl_3,dpdl_4,nrow=2)
+```

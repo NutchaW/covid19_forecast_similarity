@@ -15,12 +15,12 @@ frame_format <- function(zoltr_frame){
     # start filtering date and location and horizon
     group_by(model, horizon,  target_end_date) %>% #Add count of locations
     mutate(n_locations = n_distinct(location)) %>%
-    dplyr::filter(n_locations==n_locs) %>%
     ungroup()  %>%
+    dplyr::filter(n_locations==n_locs) %>%
     group_by(model, location, target_end_date) %>% #Add count of weeks
     dplyr::mutate(n_horizons = n_distinct(horizon)) %>%
-    dplyr::filter(n_horizons==max(n_horizons)) %>%
     ungroup() %>%
+    dplyr::filter(n_horizons==max(n_horizons)) %>%
     group_by(model, horizon, location) %>%
     mutate(n_dates = n_distinct(target_end_date)) %>%
     dplyr::filter(n_dates==max(n_dates)) %>%
@@ -125,7 +125,15 @@ build_distance_frame <- function(model_dataframe, horizon_list,target_list, appr
   #   dplyr::select(-"approx_cd") %>%
   #   dplyr::arrange(factor(model_2, levels = unique(model_2))) %>%
   #   distinct()
-  return(list(full_dataframe=dist_frame,mean_dataframe=mean_frame))
+  mean_locframe <- dist_frame %>%
+    dplyr::select(-"target_end_date") %>%
+    dplyr::group_by(horizon,target_variable,model_1,model_2) %>%
+    dplyr::mutate(mean_dis=mean(approx_cd)) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(-c("approx_cd","location")) %>%
+    dplyr::arrange(factor(model_2, levels = unique(model_2))) %>%
+    distinct()
+  return(list(full_dataframe=dist_frame,mean_dataframe=mean_frame,loc_mean = mean_locframe))
 }
 
 # create matrix
@@ -185,18 +193,15 @@ distance_heatmap <- function(sum_dist,name,metadata=NULL){
             plot.margin=unit(c(0,0,0,0),"cm"))
     
   } else {
-    set1<-c("red","blue","purple","orange","pink","green")
-    color_set <- ifelse(metadata$ensemble, 
+    set1<-c("red","blue","purple","pink","orange")
+    color_set <- ifelse(metadata$model_type == "ensemble", 
                         set1[1], 
-                        ifelse(metadata$hybrid,
+                        ifelse(metadata$model_type ==  "both stats and mech",
                                set1[2],
-                               ifelse(metadata$stats,
+                               ifelse(metadata$model_type == "statistical",
                                       set1[3],
-                                      ifelse(metadata$agent_based,
-                                             set1[4],
-                                             ifelse(metadata$compartmental,
-                                                    set1[5],
-                                                    set1[6])))))
+                                      ifelse(metadata$model_type =="mechanistic",
+                                             set1[4],set1[5]))))
     type_color <-  color_set[order(match(metadata$model_abbr,order_list))]
     ggplot(sum_dist, aes(factor(model_1,levels=order_list),
                          factor(model_2,levels=order_list))) +
@@ -216,13 +221,13 @@ distance_heatmap <- function(sum_dist,name,metadata=NULL){
   }
 }
 
-scatter <-  function(data,title_name,metadata=NULL){
+scatter <-  function(data,title_name,metadata=NULL,smooth_tf=FALSE){
   dat <- data %>% 
     dplyr::left_join(metadata,by=c("model_2"="model_abbr")) %>%
     dplyr::mutate(Model=model_2) 
   if (is.null(metadata)) {
-    ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model)) + 
-      geom_point(alpha=0.6,size=0.8) + 
+    p<-ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model)) + 
+   #   geom_point(alpha=0.6,size=0.8) + 
       geom_line(alpha=0.4) +
       ggtitle(title_name) +
       ylab("Approx. CD") +
@@ -234,27 +239,33 @@ scatter <-  function(data,title_name,metadata=NULL){
             legend.key.size = unit(0.5, 'cm'))+
       scale_x_date(date_breaks = "1 month",
                    date_labels = "%m-%y")
-  } else {
-    dat$model_type <- ifelse(dat$ensemble, 
-                                  "ensemble", 
-                                  ifelse(dat$hybrid,
-                                         "hybrid",
-                                         ifelse(dat$stats,
-                                                "statistical",
-                                                ifelse(dat$agent_based,
-                                                       "agent-based",
-                                                       ifelse(dat$compartmental,
-                                                              "compartmental",
-                                                              "machine learning")))))
-    ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model,group=model_type)) + 
-      geom_point(alpha=0.6,size=0.8,aes(shape=model_type)) + 
+  } else if(smooth_tf){
+    ggplot(dat, aes(x=target_end_date, y=mean_approx_cd,
+                    col=Model,group=interaction(Model, model_type),linetype=model_type)) + 
+      geom_point(alpha=0.6,size=0.8) + 
+      stat_smooth(alpha=0.4,size=0.5,aes(x = target_end_date, y = mean_approx_cd), method = "loess",
+                  formula = y ~ x, se = FALSE) +
+    ggtitle(title_name) +
+      ylab("Approx. CD") +
+      xlab("Forecast End Date") +
+      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
+      theme(legend.text = element_text(size=5),
+            legend.title = element_text(size=9),
+            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            legend.key.size = unit(0.5, 'cm'))+
+      scale_x_date(date_breaks = "1 month",
+                   date_labels = "%m-%y")
+  }
+  else {
+    ggplot(dat, aes(x=target_end_date, y=mean_approx_cd,col=Model,group=interaction(Model, model_type),linetype=model_type)) + 
+ #     geom_point(alpha=0.6,size=0.8) + 
       geom_line(alpha=0.4) +
       ggtitle(title_name) +
       ylab("Approx. CD") +
       xlab("Forecast End Date") +
       facet_wrap(vars(horizon), nrow = 2,scales = "free") +
       theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7),
+            legend.title = element_text(size=9),
             axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
             legend.key.size = unit(0.5, 'cm'))+
       scale_x_date(date_breaks = "1 month",
@@ -269,3 +280,41 @@ sym_mat <- function(X){
   return(as.dist(X_sym))
 }
 
+dendro_plot <- function(horizon, frame_name,metadata,type=TRUE){
+  hclust_dat <- hclust(as.dist(get(frame_name)[[horizon]]), 
+                       method = "ward.D", members = NULL)
+  ddata <- label(dendro_data(as.dendrogram(hclust_dat))) %>%
+    left_join(metadata,by=c("label"="model_abbr"))
+  set1<-c("red","blue","purple","pink","orange")
+  if(type){
+    color_set <- ifelse(ddata$model_type == "ensemble", 
+                        set1[1], 
+                        ifelse(ddata$model_type ==  "both stats and mech",
+                               set1[2],
+                               ifelse(ddata$model_type == "statistical",
+                                      set1[3],
+                                      ifelse(ddata$model_type =="mechanistic",
+                                             set1[4],set1[5]))))
+  } else {
+    color_set <- ifelse(ddata$data_source == "JHU", set1[1],set1[2])
+  }
+  dendro_p <- ggdendrogram(
+           hclust(as.dist(get(frame_name)[[horizon]]), method = "ward.D",members = NULL)
+           ,size = 2, rotate=TRUE) +
+           labs(title=paste0("Dendrogram - ",i, " wk ahead inc death"))+
+           xlab("") +
+           ylab("Mean Cramer's Distance") +
+           theme(axis.text.x = element_text(size=5),
+                 axis.text.y = element_text(size=7,colour=color_set),
+                 plot.margin=unit(c(0,0,0,0),"cm"),
+                 plot.title = element_text(size=8)
+           )
+} 
+
+catbox_plot <- function(dat){
+   ggplot(dat, aes(x=mech_type, y=mean_dis,fill=as.factor(horizon))) +
+   geom_boxplot() +
+   xlab("") +
+   ylab("Mean Approc. CD") +
+   guides(fill=guide_legend(title="horizon"))
+} 
