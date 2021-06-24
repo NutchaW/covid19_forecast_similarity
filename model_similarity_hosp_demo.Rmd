@@ -36,6 +36,7 @@ knitr::opts_chunk$set(echo=FALSE,
 
 # COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Hospitalization 
 
+In this extension of examining model similarity among Covid-19 models using Cramer's distance for incident hospitalizations (inc hosp),  we must make some adjustments to the inc hosp forecast data, which have a temporal resolution of "day" instead of "week," unlike inc case and inc death. This presents a challenge because the horizons will be different for the same target end date if the forecast dates between two models differ by only a single day. (This is not an issue when the temporal resolution is in terms of weeks, which are defined by epidemiological week, not the number of days between forecast date and target end date.) Thus, we create a new variable called horizon week to solve this issue. This variable counts horizons between 1 and 7 to have a horizon week of 1, horizons between 8 and 14 to have a horizon week of 2, etc. Hence, the analyses used on inc death and inc cases should be able to be applied easily to the inc hosp data.
 
 
 
@@ -94,41 +95,6 @@ wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv")
 
 h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
-
-# try to select more models --------------------------------------------------------------------
-first_end_date <- as.Date("2020-12-31") 
-most_recent_end_date <- as.Date("2021-06-10") # pick a date
-
-date_range <- seq.Date(from = first_end_date, to = most_recent_end_date, by = "week")
-date_range <- as.Date(date_range)
-
-test <- map_dfr(date_range,
-                 function(x) {
-                   covidHubUtils::load_latest_forecasts(last_forecast_date = x,
-                                                        forecast_date_window_size=6,
-                                                        # pick one
-                                                        locations = hlocs_high,
-                                                        types = "quantile",
-                                                        targets = target_list,
-                                                        source = "zoltar")
-                   })
-
-#create new col to make division of forecasts - by "week" (7 days of forecasts grouped together)
-test <- test %>%
-  dplyr::filter(weekdays(`target_end_date`) == weekdays(most_recent_end_date)) %>%
-  dplyr::mutate(horizon_week = case_when(
-    horizon %in% 1:7 ~ 1,
-    horizon %in% 8:14 ~ 2, 
-    horizon %in% 15:21 ~ 3,
-    horizon %in% 21:28 ~ 4,
-  ))
-
-
-test <- test %>%
- # filter(forecast_date > as.Date("2020-12-24")) %>%
-  frame_format2()
-
-unique(select(filter(arrange(test, horizon), target_end_date==as.Date("2020-12-31")), horizon))  
 ```
 
 ```{r}
