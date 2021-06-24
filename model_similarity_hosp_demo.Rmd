@@ -1,7 +1,7 @@
 ---
 title: "Forecasting Model Similarity (for inc hosp)"
 author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit, Li Shandross"
-date: "06/10/2021"
+date: "06/23/2021"
 header-includes:
    - \usepackage{tabularx}
    - \usepackage{hyperref}
@@ -35,6 +35,9 @@ knitr::opts_chunk$set(echo=FALSE,
 
 
 # COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Hospitalization 
+
+
+
 
 ## 5 locations with the highest number of COVID-19 hospitalizations by the end of February 2021
 
@@ -91,6 +94,41 @@ wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv")
 
 h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
+
+# try to select more models --------------------------------------------------------------------
+first_end_date <- as.Date("2020-12-31") 
+most_recent_end_date <- as.Date("2021-06-10") # pick a date
+
+date_range <- seq.Date(from = first_end_date, to = most_recent_end_date, by = "week")
+date_range <- as.Date(date_range)
+
+test <- map_dfr(date_range,
+                 function(x) {
+                   covidHubUtils::load_latest_forecasts(last_forecast_date = x,
+                                                        forecast_date_window_size=6,
+                                                        # pick one
+                                                        locations = hlocs_high,
+                                                        types = "quantile",
+                                                        targets = target_list,
+                                                        source = "zoltar")
+                   })
+
+#create new col to make division of forecasts - by "week" (7 days of forecasts grouped together)
+test <- test %>%
+  dplyr::filter(weekdays(`target_end_date`) == weekdays(most_recent_end_date)) %>%
+  dplyr::mutate(horizon_week = case_when(
+    horizon %in% 1:7 ~ 1,
+    horizon %in% 8:14 ~ 2, 
+    horizon %in% 15:21 ~ 3,
+    horizon %in% 21:28 ~ 4,
+  ))
+
+
+test <- test %>%
+ # filter(forecast_date > as.Date("2020-12-24")) %>%
+  frame_format2()
+
+unique(select(filter(arrange(test, horizon), target_end_date==as.Date("2020-12-31")), horizon))  
 ```
 
 ```{r}
@@ -205,6 +243,9 @@ for(loc in loc_name_high$location){
 }
 ```
 
+It appears that the Covid19Sim-Simulator is the least similar to the other models, across all five high count locations and horizons. It is the least similar in California and Texas and less dissimilar in the other three locations, Florida, Georgia, and New York. In Texas, JHUAPL-Bucky seems to show some difference from other models but not to the extend of the Covid19Sim-Simulator. 
+
+
 We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
 
 ```{r,out.width="95%", fig.align='center'}
@@ -213,6 +254,9 @@ for(loc in loc_name_high$location){
   print(do.call(get,list(paste0("t_",loc))))
 }
 ```
+
+The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to have higher approximate Cramer's Distance from the Covidhub-ensemble model compared to the other three models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. 
+
 
 We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
 
@@ -235,6 +279,9 @@ for(i in 1:4){
   grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
 }
 ```
+
+Except for the 4 week ahead inc hosp dendrogram for California, all of the dendrograms show that Covid19Sim-Simulator and JHUAPL-Bucky are the least similar to the other models, splitting away in the first or second groupings, respectively.
+
 
 ## 5 locations with the lowest number of COVID-19 deaths by the end of February 2021
 
@@ -302,6 +349,8 @@ for(loc in loc_name_low$location){
 }
 ```
 
+For the five low count locations, Covid19Sim-Simulator is likewise the most dissimilar from the other models with the largest calculator Cramer's distance over most locations and horizons. However, JHUAPL-Bucky is also fairly dissimilar from other models at horizons of three or four weeks, surpassing the Covid19Sim-Simulator in Cramer's Distance from other models in Hawaii and Vermont for the two larger horizons. 
+
 We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
 
 ```{r,out.width="95%", fig.align='center'}
@@ -310,6 +359,8 @@ for(loc in loc_name_low$location){
   print(do.call(get,list(paste0("t_",loc))))
 }
 ```
+
+Like for the high count locations, Covid19Sim-Simulator and JHUAPL-Bucky are shown to generally have the highest Cramer's Distance from the Covidhub-ensemble model. However, we note that in Arkansas only Covid19Sim-Simulator has a noticeably larger Cramer's Distance while in North Dakota only JHUAPL-Bucky has a noticeably larger Cramer's Distance. 
 
 We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
 
@@ -332,3 +383,5 @@ for(i in 1:4){
   grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
 }
 ```
+
+Covid19Sim-Simulator and JHUAPL-Bucky are the least similar according to the dendrograms for the five low locations, except for 4 wk ahead in Arkansas and 4 wk ahead in Vermont, which is similar to the results shown for the high count locations.     
