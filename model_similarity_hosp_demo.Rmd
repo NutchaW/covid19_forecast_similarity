@@ -198,7 +198,7 @@ for(loc in loc_name_high$location){
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
-```{r,fig.align='center'}
+```{r,out.width="95%", fig.align='center'}
 # print heatmapes
 for(loc in loc_name_high$location){
   print(do.call(get,list(paste0("p_",loc))))
@@ -207,7 +207,7 @@ for(loc in loc_name_high$location){
 
 We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
 
-```{r,fig.align='center'}
+```{r,out.width="95%", fig.align='center'}
 # print scatterplots
 for(loc in loc_name_high$location){
   print(do.call(get,list(paste0("t_",loc))))
@@ -216,7 +216,7 @@ for(loc in loc_name_high$location){
 
 We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
 
-```{r}
+```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
 library(ggdendro)
 for(j in 1:5){
 for(i in 1:4){
@@ -295,7 +295,7 @@ for(loc in loc_name_low$location){
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
-```{r,fig.align='center'}
+```{r,out.width="95%", fig.align='center'}
 # print heatmapes
 for(loc in loc_name_low$location){
   print(do.call(get,list(paste0("p_",loc))))
@@ -304,7 +304,7 @@ for(loc in loc_name_low$location){
 
 We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
 
-```{r,fig.align='center'}
+```{r,out.width="95%", fig.align='center'}
 # print scatterplots
 for(loc in loc_name_low$location){
   print(do.call(get,list(paste0("t_",loc))))
@@ -313,7 +313,7 @@ for(loc in loc_name_low$location){
 
 We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
 
-```{r}
+```{r,out.width="95%", fig.align='center'}
 library(ggdendro)
 for(j in 1:5){
 for(i in 1:4){
