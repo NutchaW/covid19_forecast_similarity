@@ -1,6 +1,6 @@
 ---
-title: "Forecasting Model Similarity"
-author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit, Li Shandross"
+title: "COVID-19 Forecast Similarity Analysis"
+author: "Johannes Bracher, Aaron Gerding, Evan Ray, Nick Reich, Nutcha Wattanachit"
 date: "06/24/2021"
 header-includes:
    - \usepackage{tabularx}
@@ -29,26 +29,88 @@ library(zoltr)
 library(igraph)
 library(gtools)
 library(gridExtra)
+library(grid)
 library(ggdendro)
 knitr::opts_chunk$set(echo=FALSE,
-                       comment = FALSE, message=FALSE, fig.show= 'hold',fig.pos="H",table.placement='H',
-                       fig.align = 'center',warning = FALSE)
+                       comment = FALSE, message=FALSE, fig.show= 'hold',fig.pos="H",table.placement="H",
+                       fig.align = 'center',warning =FALSE)
 ```
 
+<!--check that warnings are only for geom_text-->
+# Overview
 
-# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Death 
+The diversity of modeling techniques and data sources used by modelers and the variability in forecasting models’ performance across time highlight the importance of having a quantitative measure of similarity between short-term COVID-19 forecasts. 
 
-## 5 locations with the highest number of COVID-19 deaths by the end of February 2021
+## Cramer distance
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 deaths by the end of February 2021, all probability levels, from the target end date of October, 17th 2020 to May 29th, 2021 .
+The *Cramer distance* between two predictive distributions $F$ and $G$ is defined as
 
-```{r}
-source("./functions/distance_func_script.R")
+$$
+\text{CD}(F, G) = \int_{-\infty}^\infty(F(x) - G(x))^2 dx
+$$
+The Cramer distance is the divergence associated with the continuous ranked probability score (Thorarinsdottir 2013, Gneiting and Raftery 2007). We use the following two approximations in the analysis:
+
+### Cramer distance approximation for equally-spaced intervals (Approximation 2)
+
+\begin{equation}
+\text{CD}(F, G) \approx \frac{1}{(K + 1)^2} \times \sum_{i = 1}^{2K - 1} b_i^2(q_{i + 1} - q_i),\label{eq:approx2}
+\end{equation}
+
+* $\mathbf{q}$ is a vector of length $2K$. It is obtained by pooling the $q^F_k, q^G_k, k = 1, \dots, K$ and ordering them in increasing order (ties can be ordered in an arbitrary manner).
+* $\mathbf{a}$ is a vector of length $2K$ containing the value $1$ wherever $\mathbf{q}$ contains a quantile of $F$ and $-1$ wherever it contains a value of $G$.
+* $\mathbf{b}$ is a vector of length $2K$ containing the absolute cumulative sums of $\mathbf{a}$, i.e. $b_i = \left|\sum_{j = 1}^i a_j\right|$.
+
+### Cramer distance approximation for unequally-spaced intervals (Trapezoidal riemann sum)
+
+\begin{align}
+\text{CD}(F,G) &\approx\sum^{2K-1}_{j=1}\int^{q_{j+1}}_{q_j}{F(x)−G(x)}^2\\
+&\approx\sum^{2K-1}_{j=1}\frac{\{\hat{F}(q_j)-\hat{G}(q_j)\}^2+\{\hat{F}(q_{j+1})-\hat{G}(q_{j+1})\}^2}{2}(q_{j+1}-q_{j})\label{eq:trap}
+\end{align}
+
+where $\tau^F_j \in \boldsymbol{\tau_F}$ and $\tau^G_j \in \boldsymbol{\tau_G}$. $\boldsymbol{\tau_F}$ and $\boldsymbol{\tau_G}$ are vectors of length $2K-1$ with elements 
+
+$$
+\tau^F_j=
+\begin{cases}
+I(q_1=q_1^F)\times \tau_{q_1}^F\hspace{6cm}\text{for }j=1\\
+I(q_j\in \{q_1^F, ..., q_{K}^F\})\times \tau_{q_j}^F+I(q_j\in \{q_1^G, ..., q_{K}^G\})\times \tau_{j-1}^F\hspace{0.3cm}\text{for }j>1\\
+\end{cases}
+$$
+
+where $\tau_{q_j}^F$ is the probability level corresponding to $q_j$ given $q_j$ in the pooled quantiles comes from $F$, and $\tau_{j-1}^F$ is the $(j-1)^{th}$ probability level in $\boldsymbol{\tau_F}$.
+
+$$
+\tau^G_j=
+\begin{cases}
+I(q_1=q_1^G)\times \tau_{q_1}^G\hspace{6cm}\text{for }j=1\\
+I(q_j\in \{q_1^G, ..., q_{K}^G\})\times \tau_{q_j}^G+I(q_j\in \{q_1^F,...,q_{K}^F\})\times \tau_{j-1}^G\hspace{0.3cm}\text{for }j>1\\
+\end{cases}
+$$
+where $\tau_{q_j}^G$ is the probability level corresponding to $q_j$ given $q_j$ in the pooled quantiles comes from $G$, and $\tau_{j-1}^G$ is the $(j-1)^{th}$ probability level in $\boldsymbol{\tau_G}$.
+
+## Forecast inclusion criteria
+
+* Models: All models with complete submissions for the following criteria
+* Targets: 1-4 wk ahead inc death and inc case
+* Target end dates: Oct 19th, 2020 - May 24th,2021
+* Probability levels: All
+* Locations:
+   + 5 states with highest cumulative deaths by February 27th, 2021: CA, FL, NY, PA, TX
+   + 5 states with highest cumulative cases by February 27th, 2021: CA, FL, IL, NY, TX
+   + 5 states with lowest cumulative deaths by February 27th, 2021: AK, HI, ME, VT, WY
+   + 5 states with lowest cumulative cases by February 27th, 2021: DC, HI, ME, VT, WY
+
+<!---a lot of ideas, look at weeks where model really differ relative to one another or the ensemble, see how the ensemble perform that week or check scores/forecast skill for predictability, does ensemble outperform when there is disagreement?--->
+
+## 1-4 Week Ahead Incident Death Forecasts
+
+```{r,cache=TRUE}
+source("../functions/distance_func_script.R")
 # set targets for analysis
 target_horizon <- 1:4
 target_var <- c("inc death","inc case")
 # read in model metadata
-metadata <- read.csv("./metadata_categorized.csv") 
+metadata <- read.csv("../metadata_categorized.csv") 
 metadata$stats[which(metadata$team_name == "Karlen Working Group")] <- TRUE
 metadata$compartmental[which(metadata$team_name == "Robert Walraven")] <- FALSE
 metadata$JHU_data[which(metadata$team_name == "COVID-19 Forecast Hub")] <- TRUE
@@ -70,9 +132,9 @@ metadata$data_source <- ifelse(metadata$JHU_data,"JHU","unspecified")
 
 # each target will have different sets of models based on the current filtering
 ## high count
-wide_frame_death <- read.csv("./data/quantile_frame.csv") %>%
+wide_frame_death <- read.csv("../data/quantile_frame.csv") %>%
   dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
-wide_frame_case <- read.csv("./data/quantile_frame_inc.csv") %>%
+wide_frame_case <- read.csv("../data/quantile_frame_inc.csv") %>%
   dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
 d_frame <- frame_format(wide_frame_death) 
 c_frame <- frame_format(wide_frame_case) 
@@ -80,21 +142,24 @@ c_frame <- frame_format(wide_frame_case)
 d_meta <- colnames(d_frame)[-c(1:6)]
 c_meta <- colnames(c_frame)[-c(1:6)]
 ## low count
-wide_frame_death_low <- read.csv("./data/quantile_frame_bottom.csv") %>%
+wide_frame_death_low <- read.csv("../data/quantile_frame_bottom.csv") %>%
   dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
-wide_frame_case_low <- read.csv("./data/quantile_frame_inc_bottom.csv") %>%
+wide_frame_case_low <- read.csv("../data/quantile_frame_inc_bottom.csv") %>%
   dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
 d_frame_low <- frame_format(wide_frame_death_low) 
 c_frame_low <- frame_format(wide_frame_case_low) 
 # model type
 d_meta_low <- colnames(d_frame_low)[-c(1:6)]
 c_meta_low <- colnames(c_frame_low)[-c(1:6)]
+# remove frames 
+rm(wide_frame_death,wide_frame_death_low,wide_frame_case,wide_frame_case_low)
 ```
 
+Naturally, the differences between the two approximations are larger for further horizons since forecasts are more dissimilar. The differences for the approx. CD between CU-select and the ensemble forecasts seem a bit more pronounced for all horizons - we might want to check how the CDF (built from quantiles) look. 
 
-```{r}
+```{r,cache=TRUE}
 # high count death forecast
-loc_name <-  unique(wide_frame_death[,c("abbreviation","location")])
+#loc_name <-  unique(wide_frame_death[,c("abbreviation","location")])
 d_metadata <- metadata %>%
   dplyr::filter(model_abbr %in% d_meta)
 recent_dmeta <- d_metadata %>%
@@ -114,11 +179,11 @@ approx_cd_list <- build_distance_frame(d_frame,
                            approx_rule="trapezoid_riemann",
                            tau_F=q_set,tau_G=q_set)
 
-approx_cd_list2 <- build_distance_frame(d_frame, 
+approx_cd_list2 <- suppressWarnings(build_distance_frame(d_frame, 
                                         horizon_list=c(1:4),
                                         target_list="inc death",
                                         approx_rule="approximation2",
-                                        tau_F=q_set,tau_G=q_set)
+                                        tau_F=q_set,tau_G=q_set))
 # extract data
 total_frame <- approx_cd_list[[1]] %>%
   dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
@@ -184,7 +249,7 @@ pair_data <- approx_cd_list[[3]] %>%
   dplyr::filter(model_1!=model_2)
 
 # low count death forecast
-loc_name_low <-  unique(wide_frame_death_low[,c("abbreviation","location")])
+#loc_name_low <-  unique(wide_frame_death_low[,c("abbreviation","location")])
 d_metadata_low <- metadata %>%
   dplyr::filter(model_abbr %in% d_meta_low)
 recent_dmeta_low <- d_metadata_low %>%
@@ -203,11 +268,11 @@ approx_cd_list_low <- build_distance_frame(d_frame_low,
                            target_list="inc death",
                            approx_rule="trapezoid_riemann",
                            tau_F=q_set,tau_G=q_set)
-approx_cd_list2_low <- build_distance_frame(d_frame_low, 
-                                        horizon_list=c(1:4),
-                                        target_list="inc death",
-                                        approx_rule="approximation2",
-                                        tau_F=q_set,tau_G=q_set)
+# approx_cd_list2_low <- build_distance_frame(d_frame_low, 
+#                                         horizon_list=c(1:4),
+#                                         target_list="inc death",
+#                                         approx_rule="approximation2",
+#                                         tau_F=q_set,tau_G=q_set)
 # extract data
 total_frame_low <- approx_cd_list_low[[1]] %>%
   dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
@@ -245,7 +310,22 @@ pair_data_low <- approx_cd_list_low[[3]] %>%
   dplyr::filter(model_1!=model_2)
 ```
 
-```{r,fig.cap='Average approx. CD relative to the ensemble'}
+There are 13 models that fulfilled the criteria for the 5 locations with highest cumulative deaths and 12 models for the 5 locations with lowest cumulative deaths.
+
+### Model types
+
+```{r}
+tab1 <- rbind(short_meta,short_meta_low) %>%
+  distinct()
+knitr::kable(tab1, col.names = c("Model","Type"))
+```
+
+### Differences between two approximations (for high count locations only)
+
+The approximated pairwise Cramer's distances between each forecast and the ensemble are calculated using both types of approximations to check for any large discrepancies between the two methods. The table below shows the averaged approx. CD over all target end dates and all 5 high count locations.
+
+
+```{r}
 # print heatmapes
 # for(loc in loc_name$location){
 #   print(do.call(get,list(paste0("p_",loc))))
@@ -256,8 +336,13 @@ approx_cd_list[[3]] %>%
   dplyr::mutate(diff=mean_dis.x-mean_dis.y) %>%
   dplyr::arrange(model_1,horizon,diff) %>%
   knitr::kable(.,col.names=c("Anchor Model", "Model","Horizon","Target",
-                                     "Approx. CD uneq","Approx. CD eq","Difference"),digits=2)
+                                     "CD (uneq)","CD (eq)","Diff"),digits=2,
+               caption = "Mean approx. CDs relative to the ensemble")
 ```
+
+### Mean approximated pairwise distances over across 5 high count and 5 low count locations
+
+We can visualize the mean approximated pairwise distances across all weeks and locations in heat maps. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
 ```{r,fig.align='center'}
 # print heatmapes
@@ -268,24 +353,15 @@ distance_heatmap(approx_cd_list[[3]],
                  "Mean Approx. CD of Inc Death Forecasts by Horizon - High Mortality Count Locations",
                  recent_dmeta)
 distance_heatmap(approx_cd_list_low[[3]],
-                 "Mean Approx. CD of Inc Death Forecasts by Horizon - High Mortality Count Locations",
+                 "Mean Approx. CD of Inc Death Forecasts by Horizon - Low Mortality Count Locations",
                  recent_dmeta_low)
 ```
 
-```{r,fig.align='center'}
-# print heatmapes
-# for(loc in loc_name$location){
-#   print(do.call(get,list(paste0("p_",loc))))
-# }
-catbox_plot(pair_data)
-catbox_plot(pair_data_low)
-```
+For high morality count locations, the distances between pairs of forecasts are higher for further forecast horizons. This is less less pronounced for low count locations. CU-select forecasts for high count locations and UCSD_NEU−DeepGLEAM forecasts for low count locations seem to be more dissimilar to other models on average across all forecast horizons.
 
-We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
+We can also look at the mean approximated pairwise distances across locations only to see how the models become more similar or dissimilar over time.
 
-We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
-
-```{r,fig.align='center'}
+```{r,fig.align='center',fig.align='center'}
 # print scatterplots
 # for(loc in loc_name$location){
 #   print(do.call(get,list(paste0("t_",loc))))
@@ -313,11 +389,29 @@ scatter(ot_data_low,
         "Mean Approx. CD from COVIDhub-ensemble Over Time - \nLow Mortality Count Locations",
         recent_dmeta_low,
         smooth_tf = TRUE) 
+
 ```
 
-We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
+### Relationship between a mechanistic model type and similarity  
 
-```{r,fig.cap="High Mortality Count Locations"}
+Here we created categorical variable with 3 levels for each pair of models in the analysis: 1) both models are mechanistic 2) only one of the two models is mechanistic 3) neither of the two models are mechanistic. The approx. distances shown in the plots are averaged across locations and weeks. The distance from the model to itself and any duplicated pairs are excluded.
+
+```{r,fig.align='center',fig.height=3,fig.width=6}
+# print heatmapes
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+catbox_plot(pair_data,"High Mortality Count Locations")
+catbox_plot(pair_data_low,"Low Mortality Count Locations")
+```
+
+For low count locations, there are noticeably more outliers between forecasts when one model of a pair is mechanistic and we also see larger range of distances between forecasts when both models are not mechanistic.
+
+### Hierarchical clustering based on mean approx. CD across all weeks and locations
+
+We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters - here we use ward linkage. 
+
+```{r,fig.align='center',fig.cap="High Mortality Count Locations", fig.height=4}
 for(i in 1:4){
     assign(paste0("dp_",i),
            dendro_plot(i, "d_frame_mean",short_meta)
@@ -333,21 +427,18 @@ for(i in 1:4){
              )
   } 
 grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
-grid.arrange(dpd_1,dpd_2,dpd_3,dpd_4,nrow=2)
 ```
-```{r,fig.cap="low Mortality Count Locations"}
+
+```{r,fig.align='center',fig.cap="Low Mortality Count Locations",fig.height=4}
 grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
-grid.arrange(dpdl_1,dpdl_2,dpdl_3,dpdl_4,nrow=2)
 ```
 
-# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Case 
+## 1-4 Week Ahead Incident Case Forecasts
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all probability levels, from mid-October 2020 until May 24th,2021 for 5 locations with the highest cumulative cases.
-
-```{r}
+```{r,cache=TRUE}
 # high case forecast
 # high count death forecast
-loc_name <-  unique(wide_frame_case[,c("abbreviation","location")])
+#loc_name <-  unique(wide_frame_case[,c("abbreviation","location")])
 c_metadata <- metadata %>%
   dplyr::filter(model_abbr %in% c_meta)
 recent_cmeta <- c_metadata %>%
@@ -367,11 +458,11 @@ approx_cd_list <- build_distance_frame(c_frame,
                            approx_rule="trapezoid_riemann",
                            tau_F=q_set,tau_G=q_set)
 
-approx_cd_list2 <- build_distance_frame(c_frame, 
+approx_cd_list2 <- suppressWarnings(build_distance_frame(c_frame, 
                                         horizon_list=c(1:4),
                                         target_list="inc case",
                                         approx_rule="approximation2",
-                                        tau_F=q_set,tau_G=q_set)
+                                        tau_F=q_set,tau_G=q_set))
 # extract data
 total_frame <- approx_cd_list[[1]] %>%
   dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
@@ -410,7 +501,7 @@ pair_data <- approx_cd_list[[3]] %>%
   dplyr::filter(model_1!=model_2)
 
 # low count case forecast
-loc_name_low <-  unique(wide_frame_case_low[,c("abbreviation","location")])
+#loc_name_low <-  unique(wide_frame_case_low[,c("abbreviation","location")])
 c_metadata_low <- metadata %>%
   dplyr::filter(model_abbr %in% c_meta_low)
 recent_cmeta_low <- c_metadata_low %>%
@@ -429,11 +520,11 @@ approx_cd_list_low <- build_distance_frame(c_frame_low,
                            target_list="inc case",
                            approx_rule="trapezoid_riemann",
                            tau_F=q_set,tau_G=q_set)
-approx_cd_list2_low <- build_distance_frame(c_frame_low, 
-                                        horizon_list=c(1:4),
-                                        target_list="inc case",
-                                        approx_rule="approximation2",
-                                        tau_F=q_set,tau_G=q_set)
+# approx_cd_list2_low <- suppressWarnings(build_distance_frame(c_frame_low, 
+#                                         horizon_list=c(1:4),
+#                                         target_list="inc case",
+#                                         approx_rule="approximation2",
+#                                         tau_F=q_set,tau_G=q_set))
 # extract data
 total_frame_low <- approx_cd_list_low[[1]] %>%
   dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
@@ -471,7 +562,21 @@ pair_data_low <- approx_cd_list_low[[3]] %>%
   dplyr::filter(model_1!=model_2)
 ```
 
-```{r,fig.cap='Average approx. CD relative to the ensemble'}
+There are 8 models for both the 5 locations with lowest cumulative cases.
+
+### Model types
+
+```{r}
+tab2 <- rbind(short_meta,short_meta_low) %>%
+  distinct() 
+knitr::kable(tab2, col.names = c("Model","Type"))
+```
+
+### Differences between two approximations (for high count locations only)
+
+Similar to Table 1, this table below shows the averaged approx. CD over all target end dates and all 5 high count locations.
+
+```{r}
 # print heatmapes
 # for(loc in loc_name$location){
 #   print(do.call(get,list(paste0("p_",loc))))
@@ -482,10 +587,16 @@ approx_cd_list[[3]] %>%
   dplyr::mutate(diff=mean_dis.x-mean_dis.y) %>%
   dplyr::arrange(model_1,horizon,diff) %>%
   knitr::kable(.,col.names=c("Anchor Model", "Model","Horizon","Target",
-                                     "Approx. CD uneq","Approx. CD eq","Difference"),digits=2)
+                                     "CD (uneq)","CD (eq)","Diff"),digits=2,
+               caption = "Mean approx. CDs relative to the ensemble")
 ```
 
+Again, the differences for the approx. CD between CU-select and the ensemble case forecasts seem more pronounced compared to other models. 
+
+### Mean approximated pairwise distances over across 5 high count and 5 low count locations
+
 ```{r,fig.align='center'}
+
 # print heatmapes
 # for(loc in loc_name$location){
 #   print(do.call(get,list(paste0("p_",loc))))
@@ -498,18 +609,9 @@ distance_heatmap(approx_cd_list_low[[3]],
                  recent_cmeta_low)
 ```
 
-```{r,fig.align='center'}
-# print heatmapes
-# for(loc in loc_name$location){
-#   print(do.call(get,list(paste0("p_",loc))))
-# }
-catbox_plot(pair_data)
-catbox_plot(pair_data_low)
-```
+Interestingly, if we put the scale aside, forecasts are not significantly more dissimilar for high count locations compared to low count locations here (which is the case for inc death target). CovidAnalytics−DELPHI forecasts for both high and low count locations seem to be more dissimilar to other models on average across all forecast horizons.For low count locations, JHUAPL−Bucky and Karlen-pypm (for 3-4 wk ahead) are also more dissimilar.
 
-We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
-
-We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
+When we look at the approximated pairwise distances over time, we see high distances from the ensemble around Jan-Feb 2021 for high count locations, while we see that about a month earlier for low count locations.
 
 ```{r,fig.align='center'}
 # print scatterplots
@@ -541,9 +643,22 @@ scatter(ot_data_low,
         smooth_tf = TRUE) 
 ```
 
-We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
+### Relationship between a mechanistic model type and similarity  
 
-```{r,fig.cap="High Case Count Locations"}
+These are the same plots as in the previous section for inc death forecasts, but for inc case forecasts. It seems there is only one pair of model that are both mechanistic. We see higher medians of the mean approx. cd when one of the models in a pair is mechanistic for both high and low count locations.
+
+```{r,fig.align='center',fig.height=3,fig.width=6}
+# print heatmapes
+# for(loc in loc_name$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+catbox_plot(pair_data,"High Case Count Locations")
+catbox_plot(pair_data_low,"Low Case Count Locations")
+```
+
+### Hierarchical clustering based on mean approx. CD across all weeks and locations
+
+```{r,fig.cap="High Case Count Locations",fig.height=4}
 for(i in 1:4){
     assign(paste0("dp_",i),
            dendro_plot(i, "c_frame_mean",short_meta)
@@ -559,10 +674,8 @@ for(i in 1:4){
              )
   } 
 grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
-grid.arrange(dpd_1,dpd_2,dpd_3,dpd_4,nrow=2)
 ```
 
-```{r,fig.cap="Low CaseCount Locations"}
+```{r,fig.cap="Low Case Count Locations",fig.height=4}
 grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
-grid.arrange(dpdl_1,dpdl_2,dpdl_3,dpdl_4,nrow=2)
 ```
