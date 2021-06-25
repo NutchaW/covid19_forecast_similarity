@@ -307,14 +307,15 @@ dendro_plot <- function(horizon, frame_name,metadata,type=TRUE){
            theme(axis.text.x = element_text(size=5),
                  axis.text.y = element_text(size=7,colour=color_set),
                  plot.margin=unit(c(0,0,0,0),"cm"),
-                 plot.title = element_text(size=8)
+                 plot.title = element_text(size=7)
            )
 } 
 
-catbox_plot <- function(dat){
+catbox_plot <- function(dat,name){
    ggplot(dat, aes(x=mech_type, y=mean_dis,fill=as.factor(horizon))) +
    geom_boxplot() +
    xlab("") +
    ylab("Mean Approc. CD") +
-   guides(fill=guide_legend(title="horizon"))
+   guides(fill=guide_legend(title="horizon"))+
+   ggtitle(name)
 } 

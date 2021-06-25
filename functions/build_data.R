@@ -74,7 +74,7 @@ cases_truth_new <- cases_truth %>%
   ungroup() %>%
   dplyr::distinct() %>%
   dplyr::arrange(desc(cum_case))
-clocs <- cases_truth$location[1:5]
+clocs <- cases_truth_new$location[1:5]
 #---------------------------------------------------------------------------------------------#
 
 # pull data
@@ -98,7 +98,7 @@ write_csv(rbind(quantile_frame1,
                 quantile_frame3,
                 quantile_frame4),file = "./data/quantile_frame.csv")
 
-for(i in 1:4){
+for(i in 3:4){
   assign(paste0("quantile_frame2_",i),
          map_dfr(get(paste0("latest_pos_forecast_date_",i,"wk")),
                  function(fdates) {
