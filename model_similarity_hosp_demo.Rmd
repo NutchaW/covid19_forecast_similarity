@@ -41,9 +41,9 @@ In this extension of examining model similarity among Covid-19 models using Cram
 This initial analysis only examines target end dates for a single day of the week, Thursday, to account for models that include day of the week effects. However, this will be expanded later to more days, perhaps even exploring if performing the analysis on different days of the week leads to different results in terms of model similarity.
 
 
-## 5 locations with the highest number of COVID-19 hospitalizations by the end of February 2021
+## 5 locations with the highest number of COVID-19 hospitalizations
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 hospitalizations by end of May 2021, all probability levels, from the target end date of December, 17th 2020 to June 10th, 2021.
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 hospitalizations between December 17th, 2020 and June 10th 2021 (do we want to change this to be cumulative since the start of the pandemic? to a different end date?), all probability levels, from the target end date of during the same period.  
 
 ```{r}
 # rewrite frame_format() to work w/ hosp data
@@ -224,6 +224,8 @@ for(loc in loc_name_high$location){
 
 The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to have higher approximate Cramer's Distance from the Covidhub-ensemble model compared to the other three models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. 
 
+Something of note is that it seems that there may be some systematic difference with the Covid19Sim-Simulator model until some time in mid to late April, as it is consistently very different from the ensemble and other models until May, unlike the JHUAPL-Bucky model which seems to show multiple large spikes of deviation that only last one or two forecast end dates in a row. 
+
 
 We can also cluster the distances using hierarchical clustering. 
 
@@ -329,6 +331,9 @@ for(loc in loc_name_low$location){
 
 Like for the high count locations, Covid19Sim-Simulator and JHUAPL-Bucky are shown to generally have the highest Cramer's Distance from the Covidhub-ensemble model. However, we note that in Arkansas only Covid19Sim-Simulator has a noticeably larger Cramer's Distance while in North Dakota only JHUAPL-Bucky has a noticeably larger Cramer's Distance. 
 
+Interestingly, these low count locations seem to show more consistent single spikes for the Covid19Sim-Simulator for the enitre time period, which shows less of a systemic difference from the ensemble model. 
+
+
 We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
 
 ```{r,out.width="95%", fig.align='center'}
@@ -352,3 +357,4 @@ for(i in 1:4){
 
 Covid19Sim-Simulator and JHUAPL-Bucky are the least similar according to the dendrograms for the five low locations, except for 4 wk ahead in Arkansas and 4 wk ahead in Vermont, which is similar to the results shown for the high count locations.     
 
+Overall, it seems that Covid19Sim-Simulator and JHUAPL-Bucky are pretty consistently the two models then are the most dissimilar from the other three models, across almost all locations and horizons for both high-count and low count regions. 
