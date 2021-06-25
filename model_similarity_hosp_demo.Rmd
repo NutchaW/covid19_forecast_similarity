@@ -38,11 +38,12 @@ knitr::opts_chunk$set(echo=FALSE,
 
 In this extension of examining model similarity among Covid-19 models using Cramer's distance for incident hospitalizations (inc hosp),  we must make some adjustments to the inc hosp forecast data, which have a temporal resolution of "day" instead of "week," unlike inc case and inc death. This presents a challenge because the horizons will be different for the same target end date if the forecast dates between two models differ by only a single day. (This is not an issue when the temporal resolution is in terms of weeks, which are defined by epidemiological week, not the number of days between forecast date and target end date.) Thus, we create a new variable called horizon week to solve this issue. This variable counts horizons between 1 and 7 to have a horizon week of 1, horizons between 8 and 14 to have a horizon week of 2, etc. Hence, the analyses used on inc death and inc cases should be able to be applied easily to the inc hosp data.
 
+This initial analysis only examines target end dates for a single day of the week, Thursday, to account for models that include day of the week effects. However, this will be expanded later to more days, perhaps even exploring if performing the analysis on different days of the week leads to different results in terms of model similarity.
 
 
 ## 5 locations with the highest number of COVID-19 hospitalizations by the end of February 2021
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 hospitalizations by end of May 2021, all probability levels, from the target end date of December, 17th 2020 to June 10th, 2021 .
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 hospitalizations by end of May 2021, all probability levels, from the target end date of December, 17th 2020 to June 10th, 2021.
 
 ```{r}
 # rewrite frame_format() to work w/ hosp data
@@ -224,7 +225,7 @@ for(loc in loc_name_high$location){
 The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to have higher approximate Cramer's Distance from the Covidhub-ensemble model compared to the other three models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. 
 
 
-We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
+We can also cluster the distances using hierarchical clustering. 
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
 library(ggdendro)
@@ -331,7 +332,6 @@ Like for the high count locations, Covid19Sim-Simulator and JHUAPL-Bucky are sho
 We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
 
 ```{r,out.width="95%", fig.align='center'}
-library(ggdendro)
 for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
@@ -351,3 +351,4 @@ for(i in 1:4){
 ```
 
 Covid19Sim-Simulator and JHUAPL-Bucky are the least similar according to the dendrograms for the five low locations, except for 4 wk ahead in Arkansas and 4 wk ahead in Vermont, which is similar to the results shown for the high count locations.     
+
