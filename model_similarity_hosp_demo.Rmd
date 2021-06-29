@@ -132,60 +132,6 @@ h_frame_low <- wide_frame_hosp_low %>%
 h_meta <- colnames(h_frame_high)[-c(1:6)] #note the same 5 models for high and low counts
 ```
 
-```{r}
-scatter2 <- function(data,title_name,metadata=NULL){
-  if (is.null(metadata)) {
-    dat <- data %>% 
-      dplyr::mutate(Model=model_2) 
-    
-    ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model)) + 
-      geom_point(alpha=0.6,size=0.8) + 
-      geom_line(alpha=0.4) +
-      ggtitle(title_name) +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
-      theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
-  } else {
-    dat <- data %>% 
-      dplyr::left_join(metadata,by=c("model_2"="model_abbr")) %>%
-      dplyr::mutate(Model=model_2) 
-    
-    dat$model_type <- ifelse(dat$ensemble, 
-                             "ensemble", 
-                             ifelse(dat$hybrid,
-                                    "hybrid",
-                                    ifelse(dat$stats,
-                                           "statistical",
-                                           ifelse(dat$agent_based,
-                                                  "agent-based",
-                                                  ifelse(dat$compartmental,
-                                                         "compartmental",
-                                                         "machine learning")))))
-    ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model,group=model_type)) + 
-      geom_point(alpha=0.6,size=0.8,aes(shape=model_type)) + 
-      geom_line(alpha=0.4) +
-      ggtitle(title_name) +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
-      theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
-  }
-}
-
-```
-
-
 
 ```{r}
 h_metadata <- metadata %>%
@@ -442,3 +388,4 @@ For both high count and low count locations, all of the dendrograms show that Co
    
 
 Overall, it seems that Covid19Sim-Simulator and JHUAPL-Bucky are pretty consistently the two models then are the most dissimilar from the other three models, across almost all horizons for both high-count and low count regions. 
+
