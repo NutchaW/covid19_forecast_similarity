@@ -1,7 +1,7 @@
 ---
 title: "Forecasting Model Similarity (for inc hosp)"
 author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit, Li Shandross"
-date: "06/23/2021"
+date: "06/28/2021"
 header-includes:
    - \usepackage{tabularx}
    - \usepackage{hyperref}
@@ -45,7 +45,8 @@ This initial analysis only examines target end dates for a single day of the wee
 
 ## 5 locations with the highest number of COVID-19 hospitalizations
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the highest number of COVID-19 hospitalizations between December 17th, 2020 and June 10th 2021 (do we want to change this to be cumulative since the start of the pandemic? to a different end date?), all probability levels, from the target end date of during the same period.  
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all targets, all probability levels, and no missing forecasts between December 17th, 2020 and June 10th 2021. We aggregate results for the five locations that have the highest number of number of COVID-19 hospitalizations during this period as well as the five locations with the lowest number for the same date range.
+
 
 ```{r}
 # rewrite frame_format() to work w/ hosp data
@@ -92,12 +93,43 @@ source("./functions/distance_func_script.R")
 # set targets for analysis
 target_horizon <- 1:4
 target_var <- "inc hosp"
+# read in model metadata
+metadata <- read.csv("metadata_categorized.csv") 
+metadata$stats[which(metadata$team_name == "Karlen Working Group")] <- TRUE
+metadata$compartmental[which(metadata$team_name == "Robert Walraven")] <- FALSE
+metadata$JHU_data[which(metadata$team_name == "COVID-19 Forecast Hub")] <- TRUE
+metadata$ensemble <- ifelse(metadata$ensemble==TRUE,1,0)
+metadata$compartmental <- ifelse(metadata$compartmental==TRUE,1,0)
+metadata$stats <- ifelse(metadata$stats==TRUE,1,0)
+# manual change 
+# add text columns
+metadata$model_type <- ifelse(metadata$ensemble, 
+                                  "ensemble", 
+                                  ifelse(metadata$stats + metadata$compartmental==2,
+                                         "both stats and mech",
+                                         ifelse((metadata$stats*2)+metadata$compartmental==2,
+                                                "statistical",
+                                                ifelse((metadata$stats*2)+metadata$compartmental==1,
+                                                       "mechanistic",
+                                                       "neither stats nor mech"))))
+metadata$data_source <- ifelse(metadata$JHU_data,"JHU","unspecified")
+
+
 # each target will have different sets of models based on the current filtering
 ## high count
 wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv")
 
 h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
+
+## low count
+wide_frame_hosp_low <- read.csv("./data/quantile_frame_hosp_bottom.csv")
+
+h_frame_low <- wide_frame_hosp_low %>% 
+  frame_format2()
+
+# model type
+h_meta <- colnames(h_frame_high)[-c(1:6)] #note the same 5 models for high and low counts
 ```
 
 ```{r}
@@ -156,207 +188,257 @@ scatter2 <- function(data,title_name,metadata=NULL){
 
 
 ```{r}
-# hosp forecast
-loc_name_high <-  unique(wide_frame_hosp_high[,c("abbreviation","location")])
+h_metadata <- metadata %>%
+  dplyr::filter(model_abbr %in% h_meta)
+recent_hmeta <- h_metadata %>%
+  dplyr::group_by(team_name,model_name) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(model_abbr) %>%
+  dplyr::filter(date==max(as.POSIXct(date))) %>%
+  dplyr::ungroup()
+short_hmeta <- recent_hmeta[,c(3,ncol(recent_hmeta)-1)]
+short_hdata <- recent_hmeta[,c(3,ncol(recent_hmeta))]
+
+
+#loc_name_high <-  unique(wide_frame_hosp_high[,c("abbreviation","location")]) #commented out
+
 # calculate distance matrices
-q_set_high <- unique(h_frame_high$quantile) 
+q_set_hosp <- unique(h_frame_high$quantile) 
 approx_cd_list_high <- build_distance_frame(h_frame_high, 
                            horizon_list=c(1:4),
                            target_list="inc hosp",
                            approx_rule="trapezoid_riemann",
-                           tau_F=q_set_high,tau_G=q_set_high)
+                           tau_F=q_set_hosp,tau_G=q_set_hosp)
+
+approx_cd_list2_high <- suppressWarnings(build_distance_frame(h_frame_high, 
+                                        horizon_list=c(1:4),
+                                        target_list="inc hosp",
+                                        approx_rule="approximation2",
+                                        tau_F=q_set_hosp,tau_G=q_set_hosp))
 
   
 # extract data
 total_frame_high <- approx_cd_list_high[[1]] %>%
-  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs "))
+  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
+  dplyr::group_by(horizon,target_variable,target_end_date,pair) %>%
+  dplyr::mutate(mean_approx_cd=mean(approx_cd)) %>% #mean cd across all locations
+  dplyr::ungroup() %>%
+  dplyr::select(-c("approx_cd","location")) %>%
+  dplyr::distinct()
 total_frame_high$target_end_date <- as.Date(total_frame_high$target_end_date,origin="1970-01-01")
 
-# build some data frame
-for(loc in loc_name_high$location){
-  tmp <- approx_cd_list_high[[2]] %>% 
-    dplyr::filter(location==loc) 
-  tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
-  assign(paste0("h_frame_loc",loc), tmp_list)
+# build some data frame - commented out
+# for(loc in loc_name_high$location){
+#   tmp <- approx_cd_list_high[[2]] %>% 
+#     dplyr::filter(location==loc) 
+#   tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
+#   assign(paste0("h_frame_loc",loc), tmp_list)
+# }
+
+h_frame_mean_high <- lapply(1:4, function(x) cd_matrix(approx_cd_list_high[[3]],x))
+
+# build heatmaps and scatter plots - commented out
+# for(loc in loc_name_high$location){
+#     tmp <- approx_cd_list_high[[2]] %>%
+#     dplyr::filter(location==loc)
+#     assign(paste0("p_",loc),
+#       distance_heatmap(tmp,
+#                        paste0(loc_name_high$abbreviation[which(loc_name_high$location==loc)],
+#                                 "- Mean Approx. CD - Inc Hosp Forecasts by Horizon")))
+#       tmp <-total_frame_high %>%
+#           dplyr::filter(location==loc) %>%
+#           dplyr::group_by(horizon,target_end_date) %>%
+#           dplyr::filter(model_1 =="COVIDhub-ensemble",
+#                         model_2 != "COVIDhub-ensemble") %>%
+#           dplyr:: ungroup()
+#       assign(paste0("t_",loc),
+#              scatter2(tmp,
+#             paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
+#                 loc_name_high$abbreviation[which(loc_name_high$location==loc)]) )
+#     )
+# }
+
+
+# make data for box plot
+newdf_high <- approx_cd_list_high[[3]][, c(1:3)] %>%
+  rowwise() %>%
+  dplyr::mutate(h=ifelse(horizon==1,"a",ifelse(horizon==2,"b",ifelse(horizon==3,"c","d")))) %>%
+  dplyr::select(-"horizon")
+for (i in 1:nrow(approx_cd_list_high[[3]])){
+    newdf_high[i, ] = sort(newdf_high[i,c(1:3)])
 }
 
-# build heatmaps and scatter plots
-for(loc in loc_name_high$location){
-    tmp <- approx_cd_list_high[[2]] %>%
-    dplyr::filter(location==loc)
-    assign(paste0("p_",loc),
-      distance_heatmap(tmp,
-                       paste0(loc_name_high$abbreviation[which(loc_name_high$location==loc)],
-                                "- Mean Approx. CD - Inc Hosp Forecasts by Horizon")))
-      tmp <-total_frame_high %>%
-          dplyr::filter(location==loc) %>%
-          dplyr::group_by(horizon,target_end_date) %>%
-          dplyr::filter(model_1 =="COVIDhub-ensemble",
-                        model_2 != "COVIDhub-ensemble") %>%
-          dplyr:: ungroup()
-      assign(paste0("t_",loc),
-             scatter2(tmp,
-            paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
-                loc_name_high$abbreviation[which(loc_name_high$location==loc)]) )
-    )
+pair_data_high <- approx_cd_list_high[[3]] %>%
+  dplyr::left_join(short_hmeta,by=c("model_1"="model_abbr")) %>%
+  dplyr::left_join(short_hmeta,by=c("model_2"="model_abbr")) %>%
+  dplyr::rename(model1_type=model_type.x,
+                model2_type=model_type.y) %>%
+  rowwise() %>%
+  dplyr::mutate(stats_type=ifelse((model1_type== "statistical"&&model2_type== "statistical"),
+                                  "both statistical",
+                                  ifelse((model1_type== "statistical"|model2_type== "statistical"),
+                                  "one is statistical", "both not statistical")),
+                mech_type=ifelse((model1_type== "mechanistic" && model2_type== "mechanistic"),
+                                  "both mechanistic",
+                                  ifelse((model1_type== "mechanistic"|model2_type== "mechanistic"),
+                                  "one is mechanistic", "both not mechanistic"))) %>%
+  .[!duplicated(newdf_high),] %>%
+  dplyr::filter(model_1!=model_2)
+
+
+# low count locations
+approx_cd_list_low <- build_distance_frame(h_frame_low, 
+                           horizon_list=c(1:4),
+                           target_list="inc hosp",
+                           approx_rule="trapezoid_riemann",
+                           tau_F=q_set_hosp,tau_G=q_set_hosp)
+
+# approx_cd_list2_low <- build_distance_frame(d_frame_low, 
+#                                         horizon_list=c(1:4),
+#                                         target_list="inc death",
+#                                         approx_rule="approximation2",
+#                                         tau_F=q_set,tau_G=q_set)
+# extract data
+total_frame_low <- approx_cd_list_low[[1]] %>%
+  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs ")) %>%
+  dplyr::group_by(horizon,target_variable,target_end_date,pair) %>%
+  dplyr::mutate(mean_approx_cd=mean(approx_cd)) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-c("approx_cd","location")) %>%
+  dplyr::distinct()
+total_frame_low$target_end_date <- as.Date(total_frame_low$target_end_date,origin="1970-01-01")
+
+h_frame_mean_low <- lapply(1:4, function(x) cd_matrix(approx_cd_list_low[[3]],x))
+
+newdf_low <- approx_cd_list_low[[3]][,c(1:3)] %>%
+  rowwise() %>%
+  dplyr::mutate(h=ifelse(horizon==1,"a",ifelse(horizon==2,"b",ifelse(horizon==3,"c","d")))) %>%
+  dplyr::select(-"horizon")
+for (i in 1:nrow(approx_cd_list_low[[3]])){
+    newdf_low[i, ] = sort(newdf_low[i,c(1:3)])
 }
+pair_data_low <- approx_cd_list_low[[3]] %>%
+  dplyr::left_join(short_meta_low,by=c("model_1"="model_abbr")) %>%
+  dplyr::left_join(short_meta_low,by=c("model_2"="model_abbr")) %>%
+  dplyr::rename(model1_type=model_type.x,
+                model2_type=model_type.y) %>%
+  rowwise() %>%
+  dplyr::mutate(stats_type=ifelse((model1_type== "statistical"&&model2_type== "statistical"),
+                                  "both statistical",
+                                  ifelse((model1_type== "statistical"|model2_type== "statistical"),
+                                  "one is statistical", "both not statistical")),
+                mech_type=ifelse((model1_type== "mechanistic" && model2_type== "mechanistic"),
+                                  "both mechanistic",
+                                  ifelse((model1_type== "mechanistic"|model2_type== "mechanistic"),
+                                  "one is mechanistic", "both not mechanistic"))) %>%
+  .[!duplicated(newdf_low),] %>%
+  dplyr::filter(model_1!=model_2)
 ```
 
+There are 5 models that fulfilled the criteria for both the 5 locations with highest cumulative deaths and the 5 locations with lowest cumulative deaths.
+
+
+### Model types
+
+```{r}
+knitr::kable(short_hmeta, col.names = c("Model","Type"))
+```
+
+### Differences between two approximations (for high count locations only)
+
+The approximated pairwise Cramer's distances between each forecast and the ensemble are calculated using both types of approximations to check for any large discrepancies between the two methods. The table below shows the averaged approx. CD over all target end dates and all 5 high count locations.
+
+```{r}
+approx_cd_list_high[[3]] %>%
+  dplyr::left_join(approx_cd_list2_high[[3]], by=c("horizon","model_1","model_2","target_variable")) %>%
+  dplyr::filter(model_1=="COVIDhub-ensemble") %>%
+  dplyr::mutate(diff=mean_dis.x-mean_dis.y) %>%
+  dplyr::arrange(model_1,horizon,diff) %>%
+  knitr::kable(.,col.names=c("Anchor Model", "Model","Horizon","Target",
+                                     "CD (uneq)","CD (eq)","Diff"),digits=2,
+               caption = "Mean approx. CDs relative to the ensemble")
+```
+
+
+-
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
-```{r,out.width="95%", fig.align='center'}
+```{r,out.width="95%", fig.align='center', warning=FALSE}
 # print heatmapes
-for(loc in loc_name_high$location){
-  print(do.call(get,list(paste0("p_",loc))))
-}
+# for(loc in loc_name_high$location){
+#   print(do.call(get,list(paste0("p_",loc))))
+# }
+
+distance_heatmap(approx_cd_list_high[[3]],
+                 "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Hospitalization Count Locations",
+                 recent_hmeta)
+distance_heatmap(approx_cd_list_low[[3]],
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - Low Hospitalization Count Locations",
+                recent_hmeta)
 ```
 
-It appears that the Covid19Sim-Simulator is the least similar to the other models, across all five high count locations and horizons. It is the least similar in California and Texas and less dissimilar in the other three locations, Florida, Georgia, and New York. In Texas, JHUAPL-Bucky seems to show some difference from other models but not to the extend of the Covid19Sim-Simulator. 
+It appears that the Covid19Sim-Simulator is the least similar to the other models for both the high count and low count locations, across all four horizons. JHUAPL-Bucky is the second least similar to the other models. However, high hospitalization count locations show a greater variation between models, especially at lower horizons. In low count locations, Covid19Sim-Simulator and JHUAPL-Bucky have more similar Cramer Distances. 
 
 
 We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
 
 ```{r,out.width="95%", fig.align='center'}
-# print scatterplots
-for(loc in loc_name_high$location){
-  print(do.call(get,list(paste0("t_",loc))))
-}
+ot_data_high <- total_frame_high %>% 
+  dplyr::group_by(horizon,target_end_date) %>%
+  dplyr::filter(model_1 =="COVIDhub-ensemble",
+                model_2 != "COVIDhub-ensemble") %>%
+  dplyr:: ungroup() 
+
+ot_data_low <- total_frame_low %>% 
+  dplyr::group_by(horizon,target_end_date) %>%
+  dplyr::filter(model_1 =="COVIDhub-ensemble",
+                model_2 != "COVIDhub-ensemble") %>%
+  dplyr:: ungroup()
+
+#new func throws error due to no metadata
+scatter(ot_data_high,
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nHigh Hospitalization Count Locations",
+        recent_hmeta,
+        smooth_tf = TRUE) 
+scatter(ot_data_low,
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nLow Hospitalization Count Locations",
+        recent_hmeta,
+        smooth_tf = TRUE) 
 ```
 
-The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to have higher approximate Cramer's Distance from the Covidhub-ensemble model compared to the other three models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. 
-
-Something of note is that it seems that there may be some systematic difference with the Covid19Sim-Simulator model until some time in mid to late April, as it is consistently very different from the ensemble and other models until May, unlike the JHUAPL-Bucky model which seems to show multiple large spikes of deviation that only last one or two forecast end dates in a row. 
+The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other two models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Covid19Sim-Simulator is very different from the ensemble model from January until April. However, in low count locations, JHUAPL-Bucky shows a peak in late March/early April. 
 
 
 We can also cluster the distances using hierarchical clustering. 
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
-library(ggdendro)
-for(j in 1:5){
 for(i in 1:4){
     assign(paste0("dp_",i),
-    ggdendrogram(
-      hclust(as.dist(get(paste0("h_frame_loc",loc_name_high$location[j]))[[i]]), method = "ward.D", members = NULL)
-      ,size = 2) +
-      labs(title=paste0("Dendrogram - ",i, " wk ahead inc hosp - ",loc_name_high$abbreviation[j]))+
-      xlab("") +
-      ylab("Mean Cramer's Distance") +
-      theme(axis.text.x = element_text(size=5),
-            axis.text.y = element_text(size=7),
-            plot.margin=unit(c(0,0,0,0),"cm"),
-            plot.title = element_text(size=8)))
+           dendro_plot(i, "h_frame_mean_high",short_hmeta)
+             )
+    assign(paste0("dpd_",i),
+           dendro_plot(i, "h_frame_mean_high",short_hdata,FALSE)
+             )
+    assign(paste0("dpl_",i),
+           dendro_plot(i, "h_frame_mean_low",short_hmeta)
+             )
+    assign(paste0("dpdl_",i),
+           dendro_plot(i, "h_frame_mean_low",short_hdata,FALSE)
+             )
   } 
-  grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
-}
+grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
 ```
 
-Except for the 4 week ahead inc hosp dendrogram for California, all of the dendrograms show that Covid19Sim-Simulator and JHUAPL-Bucky are the least similar to the other models, splitting away in the first or second groupings, respectively.
 
 
-## 5 locations with the lowest number of COVID-19 deaths by the end of February 2021
-
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all target, all 5 locations with the lowest number of COVID-19 deaths by the end of February 2021, all probability levels, from the target end date of December, 17th 2020 to June 10th, 2021 .
-
-
-```{r}
-# low count
-wide_frame_hosp_low <- read.csv("./data/quantile_frame_hosp_bottom.csv")
-
-h_frame_low <- wide_frame_hosp_low %>% 
-  frame_format2()
-
-
-loc_name_low <-  unique(wide_frame_hosp_low[,c("abbreviation","location")])
-# calculate distance matrices
-q_set_low <- unique(h_frame_low$quantile) 
-approx_cd_list_low <- build_distance_frame(h_frame_low, 
-                           horizon_list=c(1:4),
-                           target_list="inc hosp",
-                           approx_rule="trapezoid_riemann",
-                           tau_F=q_set_low,tau_G=q_set_low)
-
-# extract data
-total_frame_low <- approx_cd_list_low[[1]] %>%
-  dplyr::mutate(pair=paste(model_1,model_2,sep=" vs "))
-total_frame_low$target_end_date <- as.Date(total_frame_low$target_end_date,origin="1970-01-01")
-
-# build some data frame
-for(loc in loc_name_low$location){
-  tmp <- approx_cd_list_low[[2]] %>% 
-    dplyr::filter(location==loc) 
-  tmp_list <-  lapply(1:4, function(x) cd_matrix(tmp,x))
-  assign(paste0("h_frame_loc",loc), tmp_list)
-}
-
-# build heatmaps and scatter plots
-for(loc in loc_name_low$location){
-    tmp <- approx_cd_list_low[[2]] %>%
-    dplyr::filter(location==loc)
-    assign(paste0("p_",loc),
-      distance_heatmap(tmp,
-                       paste0(loc_name_low$abbreviation[which(loc_name_low$location==loc)],
-                                "- Mean Approx. CD - Inc Hosp Forecasts by Horizon")))
-      tmp <-total_frame_low %>%
-          dplyr::filter(location==loc) %>%
-          dplyr::group_by(horizon,target_end_date) %>%
-          dplyr::filter(model_1 =="COVIDhub-ensemble",
-                        model_2 != "COVIDhub-ensemble") %>%
-          dplyr:: ungroup()
-      assign(paste0("t_",loc),
-             scatter2(tmp,
-            paste0("Approx. CD from COVIDhub-ensemble Over Time  - ",
-                loc_name_low$abbreviation[which(loc_name_low$location==loc)]) )
-    )
-}
+```{r,fig.align='center',fig.cap="Low Mortality Count Locations",fig.height=4}
+grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
 ```
 
-We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
+For both high count and low count locations, all of the dendrograms show that Covid19Sim-Simulator is the most dissimilar to the other models, followed by JHUAPL-Bucky. 
 
-```{r,out.width="95%", fig.align='center'}
-# print heatmapes
-for(loc in loc_name_low$location){
-  print(do.call(get,list(paste0("p_",loc))))
-}
-```
+   
 
-For the five low count locations, Covid19Sim-Simulator is likewise the most dissimilar from the other models with the largest calculator Cramer's distance over most locations and horizons. However, JHUAPL-Bucky is also fairly dissimilar from other models at horizons of three or four weeks, surpassing the Covid19Sim-Simulator in Cramer's Distance from other models in Hawaii and Vermont for the two larger horizons. 
-
-We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
-
-```{r,out.width="95%", fig.align='center'}
-# print scatterplots
-for(loc in loc_name_low$location){
-  print(do.call(get,list(paste0("t_",loc))))
-}
-```
-
-Like for the high count locations, Covid19Sim-Simulator and JHUAPL-Bucky are shown to generally have the highest Cramer's Distance from the Covidhub-ensemble model. However, we note that in Arkansas only Covid19Sim-Simulator has a noticeably larger Cramer's Distance while in North Dakota only JHUAPL-Bucky has a noticeably larger Cramer's Distance. 
-
-Interestingly, these low count locations seem to show more consistent single spikes for the Covid19Sim-Simulator for the enitre time period, which shows less of a systemic difference from the ensemble model. 
-
-
-We can cluster the distances using hierarchical clustering. Different linkages will result in different clusters, we probably should investigate more later. 
-
-```{r,out.width="95%", fig.align='center'}
-for(j in 1:5){
-for(i in 1:4){
-    assign(paste0("dp_",i),
-    ggdendrogram(
-      hclust(as.dist(get(paste0("h_frame_loc",loc_name_low$location[j]))[[i]]), method = "ward.D", members = NULL)
-      ,size = 2) +
-      labs(title=paste0("Dendrogram - ",i, " wk ahead inc hosp - ",loc_name_low$abbreviation[j]))+
-      xlab("") +
-      ylab("Mean Cramer's Distance") +
-      theme(axis.text.x = element_text(size=5),
-            axis.text.y = element_text(size=7),
-            plot.margin=unit(c(0,0,0,0),"cm"),
-            plot.title = element_text(size=8)))
-  } 
-  grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
-}
-```
-
-Covid19Sim-Simulator and JHUAPL-Bucky are the least similar according to the dendrograms for the five low locations, except for 4 wk ahead in Arkansas and 4 wk ahead in Vermont, which is similar to the results shown for the high count locations.     
-
-Overall, it seems that Covid19Sim-Simulator and JHUAPL-Bucky are pretty consistently the two models then are the most dissimilar from the other three models, across almost all locations and horizons for both high-count and low count regions. 
+Overall, it seems that Covid19Sim-Simulator and JHUAPL-Bucky are pretty consistently the two models then are the most dissimilar from the other three models, across almost all horizons for both high-count and low count regions. 
