@@ -102,6 +102,7 @@ metadata$ensemble <- ifelse(metadata$ensemble==TRUE,1,0)
 metadata$compartmental <- ifelse(metadata$compartmental==TRUE,1,0)
 metadata$stats <- ifelse(metadata$stats==TRUE,1,0)
 # manual change 
+#metadata <- mutate(filter(metadata, model_abbr == "Karlen-pypm"), model_type = "mechanistic")
 # add text columns
 metadata$model_type <- ifelse(metadata$ensemble, 
                                   "ensemble", 
@@ -117,7 +118,7 @@ metadata$data_source <- ifelse(metadata$JHU_data,"JHU","unspecified")
 
 # each target will have different sets of models based on the current filtering
 ## high count
-wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv")
+wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv") 
 
 h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
@@ -306,8 +307,8 @@ approx_cd_list_high[[3]] %>%
                caption = "Mean approx. CDs relative to the ensemble")
 ```
 
+We notice that Covid19Sim-Simulator has a much higher difference between its equal and unequal Cramer Distances compared to the other models, except for at a four week horizon, where JHUAPL-Bucky has a similarly high difference between its Cramer Distances.
 
--
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
@@ -325,7 +326,7 @@ distance_heatmap(approx_cd_list_low[[3]],
                 recent_hmeta)
 ```
 
-It appears that the Covid19Sim-Simulator is the least similar to the other models for both the high count and low count locations, across all four horizons. JHUAPL-Bucky is the second least similar to the other models. However, high hospitalization count locations show a greater variation between models, especially at lower horizons. In low count locations, Covid19Sim-Simulator and JHUAPL-Bucky have more similar Cramer Distances. 
+It appears that the Covid19Sim-Simulator is the least similar to the other models for both the high count and low count locations, across all four horizons. JHUAPL-Bucky is the second least similar to the other models. However, high hospitalization count locations show a greater variation between models, especially at lower horizons. In low count locations, Covid19Sim-Simulator and JHUAPL-Bucky have more similar Cramer Distances. Of note is the greater difference between model at low horizons for high count locations, which is the opposite of the results shown for inc cases and inc deaths. 
 
 
 We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
@@ -354,7 +355,21 @@ scatter(ot_data_low,
         smooth_tf = TRUE) 
 ```
 
-The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other two models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Covid19Sim-Simulator is very different from the ensemble model from January until April. However, in low count locations, JHUAPL-Bucky shows a peak in late March/early April. 
+The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other two models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Covid19Sim-Simulator is very different from the ensemble model from January until April. However, in low count locations, JHUAPL-Bucky shows a peak in late March/early April, although this peak is not largely different, as the scale is pretty small. 
+
+```{r}
+hosp_truth_high <- load_truth("HealthData", 
+                         "inc hosp", 
+                         temporal_resolution="weekly",
+                         data_location = "remote_hub_repo") %>%
+  dplyr::filter(target_end_date >= min(unique(ot_data_high$target_end_date)),
+                target_end_date <= max(unique(ot_data_high$target_end_date)),
+                geo_type=="state",
+                location == unique(h_frame_high$location)) # load for high and low locs
+# plot truth data
+##ggplot()
+```
+
 
 
 We can also cluster the distances using hierarchical clustering. 
@@ -383,7 +398,72 @@ grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
 grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
 ```
 
-For both high count and low count locations, all of the dendrograms show that Covid19Sim-Simulator is the most dissimilar to the other models, followed by JHUAPL-Bucky. 
+For both high count and low count locations, all of the dendrograms show that Covid19Sim-Simulator is the most dissimilar to the other models, followed by JHUAPL-Bucky. However, the scale for differences in Cramer Distance for the low count locations is very small, which may be a result of low hospitalizations.
+
+   
+
+Overall, it seems that Covid19Sim-Simulator and JHUAPL-Bucky are pretty consistently the two models then are the most dissimilar from the other three models, across almost all horizons for both high-count and low count regions. 
+
+
+
+It appears that the Covid19Sim-Simulator is the least similar to the other models for both the high count and low count locations, across all four horizons. JHUAPL-Bucky is the second least similar to the other models. However, high hospitalization count locations show a greater variation between models, especially at lower horizons. In low count locations, Covid19Sim-Simulator and JHUAPL-Bucky have more similar Cramer Distances. Of note is the greater difference between model at low horizons for high count locations, which is the opposite of the results shown for inc cases and inc deaths. 
+
+
+We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
+
+```{r,out.width="95%", fig.align='center'}
+ot_data_high <- total_frame_high %>% 
+  dplyr::group_by(horizon,target_end_date) %>%
+  dplyr::filter(model_1 =="COVIDhub-ensemble",
+                model_2 != "COVIDhub-ensemble") %>%
+  dplyr:: ungroup() 
+
+ot_data_low <- total_frame_low %>% 
+  dplyr::group_by(horizon,target_end_date) %>%
+  dplyr::filter(model_1 =="COVIDhub-ensemble",
+                model_2 != "COVIDhub-ensemble") %>%
+  dplyr:: ungroup()
+
+#new func throws error due to no metadata
+scatter(ot_data_high,
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nHigh Hospitalization Count Locations",
+        smooth_tf = TRUE) 
+scatter(ot_data_low,
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nLow Hospitalization Count Locations",
+        recent_hmeta,
+        smooth_tf = TRUE) 
+```
+
+The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other two models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Covid19Sim-Simulator is very different from the ensemble model from January until April. However, in low count locations, JHUAPL-Bucky shows a peak in late March/early April, although this peak is not largely different, as the scale is pretty small. 
+
+
+We can also cluster the distances using hierarchical clustering. 
+
+```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
+for(i in 1:4){
+    assign(paste0("dp_",i),
+           dendro_plot(i, "h_frame_mean_high",short_hmeta)
+             )
+    assign(paste0("dpd_",i),
+           dendro_plot(i, "h_frame_mean_high",short_hdata,FALSE)
+             )
+    assign(paste0("dpl_",i),
+           dendro_plot(i, "h_frame_mean_low",short_hmeta)
+             )
+    assign(paste0("dpdl_",i),
+           dendro_plot(i, "h_frame_mean_low",short_hdata,FALSE)
+             )
+  } 
+grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
+```
+
+
+
+```{r,fig.align='center',fig.cap="Low Mortality Count Locations",fig.height=4}
+grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
+```
+
+For both high count and low count locations, all of the dendrograms show that Covid19Sim-Simulator is the most dissimilar to the other models, followed by JHUAPL-Bucky. However, the scale for differences in Cramer Distance for the low count locations is very small, which may be a result of low hospitalizations.
 
    
 
