@@ -143,18 +143,18 @@ recent_hmeta <- h_metadata %>%
   dplyr::group_by(model_abbr) %>%
   dplyr::filter(date==max(as.POSIXct(date))) %>%
   dplyr::ungroup()
-recent_hmeta[5,24] <- "mechanistic"
+recent_hmeta[5,24] <- "mechanistic" # change the Karlen model to mech
+recent_hmeta[3,6] <- "public mobility data, CSSE, HHS, CDC scenario 5 data" 
 short_hmeta <- recent_hmeta[,c(3,ncol(recent_hmeta)-1)]
 short_hdata <- recent_hmeta[,c(3,ncol(recent_hmeta))]
 
 # model inputs
 short_hinput <- select(recent_hmeta, c(model_abbr, data_inputs))
-short_hinput[3,2] <- "public mobility data, CSSE, HHS, CDC scenario 5"
-
 
 # model methods
 h_methods <- select(recent_hmeta, c(model_abbr, methods, methods_long)) 
-# no day of week effects used in these 5 models
+# day of week effects won't be listed in methods
+#   check for it by plotting the original forecast data to see trends w/in a single week
 
 # calculate distance matrices
 q_set_hosp <- unique(h_frame_high$quantile) 
@@ -380,6 +380,53 @@ ggplot(hosp_truth_low, aes(x = target_end_date, y = value, color = location_name
                    date_labels = "%m-%y")
 ```
 It seems that the Covid19Sim-Simulator's differences from the ensemble model are follow the trends shown by the truth data. 
+
+
+```{r}
+hosp_truth_us <- load_truth("HealthData", 
+                         "inc hosp", 
+                         temporal_resolution="weekly",
+                         data_location = "remote_hub_repo") %>%
+  dplyr::filter(target_end_date >= min(unique(ot_data_high$target_end_date)),
+                target_end_date <= max(unique(ot_data_high$target_end_date)),
+                geo_type=="state",
+                location == "US") 
+
+
+h_forecast <- load_latest_forecasts(
+  locations = "US",
+  targets = paste(1:31, "day ahead inc hosp"),
+  last_forecast_date = as.Date("2021-01-01") ,
+  forecast_date_window_size = 6,
+  source = "zoltar")
+
+
+plot1 <- plot_forecasts(filter(h_forecast, (model %in% h_meta)), 
+                     target_variable = "inc hosp", 
+                     truth_source="HealthData", 
+                     subtitle = "none", 
+                     title = "none",
+                     show_caption=FALSE,
+                     fill_by_model = TRUE, fill_transparency = .3,
+                     intervals=NULL) + 
+  scale_x_date(name=NULL, date_breaks = "1 month", date_labels = "%b '%y", limits=c(as.Date(NA), forecast_date+32), expand = expansion(mult=c(0.02,0.02))) + 
+  theme(axis.ticks.length.x = unit(0.5, "cm"),  
+        axis.text.x = element_text(vjust = 7, hjust = -0.2),
+        plot.title = element_blank())
+
+plot1  
+
+#plot1_1 <- 
+  plot1 +
+  scale_x_date(name=NULL, 
+               date_breaks = "1 month", 
+               date_labels = "%b '%y", 
+               limits = c(as.Date("2021-01-01"), as.Date("2021-01-31"))) 
+```
+
+The truth data has a cyclic pattern that indicates that there may be a day of the week effect such that incident hospitalizations increase during the week but fall on the weekend. 
+
+It seems that both Covid19Sim-Simulator and JHUAPL-Bucky predict similar trends for January 2021, except Covid19Sim-Simulator has a higher "intercept", which leads to its Cramer's Distance between it and the COVIDhub-ensemble much greater than that of JHUAPL-Bucky. 
 
 
 We can also cluster the distances using hierarchical clustering. 
