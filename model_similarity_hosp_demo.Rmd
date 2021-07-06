@@ -339,7 +339,9 @@ hosp_truth_high <- load_truth("HealthData",
   dplyr::filter(target_end_date >= min(unique(ot_data_high$target_end_date)),
                 target_end_date <= max(unique(ot_data_high$target_end_date)),
                 geo_type=="state",
-                location_name == unique(wide_frame_hosp_high$location_name)) 
+                location_name %in% unique(wide_frame_hosp_high$location_name)) 
+
+
 
 hosp_truth_low <- load_truth("HealthData", 
                          "inc hosp", 
@@ -348,7 +350,7 @@ hosp_truth_low <- load_truth("HealthData",
   dplyr::filter(target_end_date >= min(unique(ot_data_high$target_end_date)),
                 target_end_date <= max(unique(ot_data_high$target_end_date)),
                 geo_type=="state",
-                location_name == unique(wide_frame_hosp_low$location_name)) 
+                location_name %in% unique(wide_frame_hosp_low$location_name)) 
 
 # plot truth data
 ggplot(hosp_truth_high, aes(x = target_end_date, y = value, color = location_name)) + 
@@ -391,7 +393,6 @@ hosp_truth_us <- load_truth("HealthData",
                 target_end_date <= max(unique(ot_data_high$target_end_date)),
                 geo_type=="state",
                 location == "US") 
-
 
 h_forecast <- load_latest_forecasts(
   locations = "US",
