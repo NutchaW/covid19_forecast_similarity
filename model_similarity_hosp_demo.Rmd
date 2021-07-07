@@ -357,7 +357,7 @@ ggplot(hosp_truth_high, aes(x = target_end_date, y = value, color = location_nam
       geom_point(alpha=0.6,size=0.8) + 
       stat_smooth(alpha=0.4,size=0.5,aes(x = target_end_date, y = value), method = "loess",
                   formula = y ~ x, se = FALSE) +
-      ggtitle("Inc Hosp Over Time - High Count Locations") +
+      ggtitle("Hosp Truth Over Time - High Count Locations") +
       ylab("Inc Hosp") +
       xlab("Forecast End Date") +
       theme(legend.text = element_text(size=5),
@@ -371,7 +371,7 @@ ggplot(hosp_truth_low, aes(x = target_end_date, y = value, color = location_name
       geom_point(alpha=0.6,size=0.8) + 
       stat_smooth(alpha=0.4,size=0.5,aes(x = target_end_date, y = value), method = "loess",
                   formula = y ~ x, se = FALSE) +
-      ggtitle("Inc Hosp Over Time - Low Count Locations") +
+      ggtitle("Hosp Truth Over Time - Low Count Locations") +
       ylab("Inc Hosp") +
       xlab("Forecast End Date") +
       theme(legend.text = element_text(size=5),
@@ -394,14 +394,44 @@ hosp_truth_us <- load_truth("HealthData",
                 geo_type=="state",
                 location == "US") 
 
+ggplot(hosp_truth_us, aes(x = target_end_date, y = value)) + 
+      geom_point(alpha=0.6,size=0.8) + 
+      geom_line() +
+      ggtitle("Inc Hosp Over Time - High Count Locations") +
+      ylab("Inc Hosp") +
+      xlab("Forecast End Date") +
+      theme(legend.text = element_text(size=5),
+            legend.title = element_text(size=9),
+            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            legend.key.size = unit(0.5, 'cm'))+
+      scale_x_date(date_breaks = "1 month",
+                   date_labels = "%m-%y")
+
+hosp_truth <- load_truth("HealthData", 
+                         "inc hosp", 
+                         temporal_resolution="weekly",
+                         data_location = "remote_hub_repo") %>%
+  dplyr::filter(target_end_date >= min(unique(ot_data_high$target_end_date)),
+                target_end_date <= max(unique(ot_data_high$target_end_date)),
+                geo_type=="state") 
+
+lubridate::wday(as.Date("2021-01-31"))
+
 h_forecast <- load_latest_forecasts(
   locations = "US",
   targets = paste(1:31, "day ahead inc hosp"),
-  last_forecast_date = as.Date("2021-01-01") ,
+  last_forecast_date = as.Date("2021-01-31") ,
   forecast_date_window_size = 6,
   source = "zoltar")
 
+recent <- load_latest_forecasts(
+  locations = "US",
+  targets = paste(1:31, "day ahead inc hosp"),
+  last_forecast_date = as.Date("2021-05-29") ,
+  forecast_date_window_size = 6,
+  source = "zoltar")
 
+# plot 5 inc hosp models + truth data
 plot1 <- plot_forecasts(filter(h_forecast, (model %in% h_meta)), 
                      target_variable = "inc hosp", 
                      truth_source="HealthData", 
@@ -410,22 +440,117 @@ plot1 <- plot_forecasts(filter(h_forecast, (model %in% h_meta)),
                      show_caption=FALSE,
                      fill_by_model = TRUE, fill_transparency = .3,
                      intervals=NULL) + 
-  scale_x_date(name=NULL, date_breaks = "1 month", date_labels = "%b '%y", limits=c(as.Date(NA), forecast_date+32), expand = expansion(mult=c(0.02,0.02))) + 
+  scale_x_date(name=NULL, date_breaks = "1 month", date_labels = "%b '%y", limits=c(as.Date(NA), as.Date("2021-01-31")+32), expand = expansion(mult=c(0.02,0.02))) + 
   theme(axis.ticks.length.x = unit(0.5, "cm"),  
         axis.text.x = element_text(vjust = 7, hjust = -0.2),
         plot.title = element_blank())
 
 plot1  
 
-#plot1_1 <- 
+# zoom-in
   plot1 +
   scale_x_date(name=NULL, 
                date_breaks = "1 month", 
                date_labels = "%b '%y", 
-               limits = c(as.Date("2021-01-01"), as.Date("2021-01-31"))) 
+               limits = c(as.Date("2021-01-31"), as.Date("2021-02-28"))) 
+
+ 
+# plot all models
+plot2 <- plot_forecasts(filter(h_forecast, (model %in% unique(wide_frame_hosp_high$model))), 
+                     target_variable = "inc hosp", 
+                     truth_source="HealthData", 
+                     subtitle = "none", 
+                     title = "none",
+                     show_caption=FALSE,
+                     fill_by_model = TRUE, fill_transparency = .3,
+                     intervals=NULL) + 
+  scale_x_date(name=NULL, date_breaks = "1 month", date_labels = "%b '%y", limits=c(as.Date(NA), as.Date("2021-01-31")+32), expand = expansion(mult=c(0.02,0.02))) + 
+  theme(axis.ticks.length.x = unit(0.5, "cm"),  
+        axis.text.x = element_text(vjust = 7, hjust = -0.2),
+        plot.title = element_blank())
+
+plot2  
+
+# zoom-in
+  plot2 +
+  scale_x_date(name=NULL, 
+               date_breaks = "1 month", 
+               date_labels = "%b '%y", 
+               limits = c(as.Date("2021-01-31"), as.Date("2021-02-28"))) 
+  
+  
+recent_plot <- plot_forecasts(filter(recent, (model %in% unique(wide_frame_hosp_high$model))), 
+                     target_variable = "inc hosp", 
+                     truth_source="HealthData", 
+                     subtitle = "none", 
+                     title = "none",
+                     show_caption=FALSE,
+                     fill_by_model = TRUE, fill_transparency = .3,
+                     intervals=NULL) + 
+  scale_x_date(name=NULL, date_breaks = "1 month", date_labels = "%b '%y", limits=c(as.Date(NA), as.Date("2021-05-29")+32), expand = expansion(mult=c(0.02,0.02))) + 
+  theme(axis.ticks.length.x = unit(0.5, "cm"),  
+        axis.text.x = element_text(vjust = 7, hjust = -0.2),
+        plot.title = element_blank())  
+
+recent_plot +
+  coord_cartesian(ylim = c(0, 5000)) +
+  scale_x_date(name=NULL, 
+               date_breaks = "1 month", 
+               date_labels = "%b '%y", 
+               limits = c(as.Date("2021-05-29"), as.Date("2021-06-28"))) 
+
+
+###### 
+plot2_select <- plot_forecasts(filter(h_forecast, (model %in% c("LANL-GrowthRate", 
+                                                                "COVIDhub-ensemble", 
+                                                                "GT-DeepCOVID"))), 
+                     target_variable = "inc hosp", 
+                     truth_source="HealthData", 
+                     subtitle = "none", 
+                     title = "none",
+                     show_caption=FALSE,
+                     fill_by_model = TRUE, fill_transparency = .3,
+                     intervals=NULL) + 
+  scale_x_date(name=NULL, date_breaks = "1 month", date_labels = "%b '%y", limits=c(as.Date(NA), as.Date("2021-01-31")+32), expand = expansion(mult=c(0.02,0.02))) + 
+  theme(axis.ticks.length.x = unit(0.5, "cm"),  
+        axis.text.x = element_text(vjust = 7, hjust = -0.2),
+        plot.title = element_blank())  
+
+# zoom-in
+  plot2_select +
+  scale_x_date(name=NULL, 
+               date_breaks = "1 month", 
+               date_labels = "%b '%y", 
+               limits = c(as.Date("2021-01-31"), as.Date("2021-02-28"))) 
+  
+  
+recent_plot_select <- plot_forecasts(filter(recent, (model %in% c("LANL-GrowthRate", 
+                                                                "COVIDhub-ensemble", 
+#                                                                "GT-DeepCOVID",
+#                                                                "JHUAPL-Gecko",
+#                                                                "COVIDhub-trained_ensemble",
+                                                                "JHUAPL-Bucky"))), 
+                     target_variable = "inc hosp", 
+                     truth_source="HealthData", 
+                     subtitle = "none", 
+                     title = "none",
+                     show_caption=FALSE,
+                     fill_by_model = TRUE, fill_transparency = .3,
+                     intervals=NULL) + 
+  scale_x_date(name=NULL, date_breaks = "1 month", date_labels = "%b '%y", limits=c(as.Date(NA), as.Date("2021-05-29")+32), expand = expansion(mult=c(0.02,0.02))) + 
+  theme(axis.ticks.length.x = unit(0.5, "cm"),  
+        axis.text.x = element_text(vjust = 7, hjust = -0.2),
+        plot.title = element_blank())  
+
+recent_plot_select +
+  coord_cartesian(ylim = c(0, 4000)) +
+  scale_x_date(name=NULL, 
+               date_breaks = "1 month", 
+               date_labels = "%b '%y", 
+               limits = c(as.Date("2021-05-29"), as.Date("2021-06-28")))   
 ```
 
-The truth data has a cyclic pattern that indicates that there may be a day of the week effect such that incident hospitalizations increase during the week but fall on the weekend. 
+The truth data has a cyclic pattern that indicates that there may be a day of the week effect such that incident hospitalizations increase during the week but fall on the weekend. However, none of the five models included seem to include day of the week effects.  
 
 It seems that both Covid19Sim-Simulator and JHUAPL-Bucky predict similar trends for January 2021, except Covid19Sim-Simulator has a higher "intercept", which leads to its Cramer's Distance between it and the COVIDhub-ensemble much greater than that of JHUAPL-Bucky. 
 
