@@ -53,6 +53,7 @@ death_truth <- load_truth("JHU",
   dplyr::arrange(desc(value))
 # get top 5 and bottom 5
 dlocs <- death_truth$location[1:5]
+forecast_end_dates <- seq(first_sat_end_date,as.Date("2021-07-03"),7)
 #---------------------------------------------------------------------------------------------#
 # do the same for cases
 end_dates <- seq(as.Date("2020-01-25"),as.Date("2021-02-27"),7)
@@ -75,6 +76,19 @@ cases_truth_new <- cases_truth %>%
   dplyr::distinct() %>%
   dplyr::arrange(desc(cum_case))
 clocs <- cases_truth_new$location[1:5]
+
+# pull data
+truth_high <- map_dfr(forecast_end_dates,
+                 function(fdates) {
+                   covidHubUtils::load_truth("JHU", 
+                                             c("inc case","inc death"), 
+                                             truth_end_date = fdates,
+                                             locations = c(dlocs,clocs),
+                                             temporal_resolution="weekly",
+                                             data_location = "remote_hub_repo")}) %>%
+  dplyr::filter(target_end_date >= first_sat_end_date) %>%
+  distinct() %>%
+  write.csv(., file = "./data/truth_deathcase_h.csv")
 #---------------------------------------------------------------------------------------------#
 
 # pull data
@@ -170,6 +184,19 @@ cases_truth_low <- cases_truth_new %>%
   dplyr::arrange(cum_case) %>%
   dplyr::filter(as.numeric(location)<60)
 clocs <- cases_truth_low$location[1:5]
+truth_low <- map_dfr(forecast_end_dates,
+                      function(fdates) {
+                        covidHubUtils::load_truth("JHU", 
+                                                  c("inc case","inc death"), 
+                                                  truth_end_date = fdates,
+                                                  locations = c(dlocs,clocs),
+                                                  temporal_resolution="weekly",
+                                                  data_location = "remote_hub_repo")})
+## save truth
+truth <- rbind(truth_low,truth_high) %>%
+  dplyr::filter(target_end_date >= first_sat_end_date) %>%
+  distinct() %>%
+  write.csv(., file = "./data/truth_deathcase.csv")
 
 # run to build
   for(i in 1:4){

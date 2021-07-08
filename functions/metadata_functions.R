@@ -55,7 +55,7 @@ make_metadata_table <- function(frame,summarizing=FALSE) {
   # check for machine learning
   ml.c <- "neural network|random forecast|learning"
   # check for compartmental 
-  compart.c <- "sir|seir|slir|compartmental|differential equations"
+  compart.c <- "sir|seir|slir|compartment|differential equations"
   # check for spatio
   spatial.c <- "spatio|spatial"
   # agent based
