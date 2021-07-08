@@ -432,42 +432,47 @@ ggplot(cd_diff_low, aes(x=target_end_date, y=mean_approx_cd)) +
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
 ###### Plot model forecasts and truth data for high hosp locs ---------------------------------------- #
+hosp_pt_high <- read.csv("./data/point_frame_hosp_top.csv")
 
-
+hosp_pt_high <- hosp_pt_high %>%
   select(-c(quantile, location, 11:16)) %>%
-  group_by(model, target_end_date, horizon_week) %>%
+  group_by(model, target_end_date, horizon_week, horizon) %>%
   mutate(cum_hosp = sum(value)) %>%
   distinct(cum_hosp, .keep_all = TRUE) %>%
   filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky")) %>%
   filter(horizon_week == 1) %>%
   mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
 
-# ggplot(hosp_pt_high2) + 
+hosp_pt_high$target_end_date <- parse_date_time(hosp_pt_high$target_end_date, orders = "ymd")
+hosp_pt_high$day_type <- as.factor(hosp_pt_high$day_type)
+
+# ggplot(hosp_pt_high) + 
 #   geom_point(aes(x = target_end_date, y = cum_hosp, color = model, shape = day_type, alpha = 0.5)) +
 #   geom_line(aes(x = target_end_date, y = cum_hosp, color = model)) +
 #   facet_wrap(vars(model))
 
-ggplot(filter(hosp_pt_high2, model == "LANL-GrowthRate")) + 
+ggplot(filter(hosp_pt_high, model == "LANL-GrowthRate")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  geom_vline(aes(xintercept = as.Date("2021-05-22"), color = "red")) +
-  labs(title = "LANL-GrowthRate Forecasts")
+#  geom_vline(aes(xintercept = as.Date("2021-05-22"), color = "red")) +
+  labs(title = "LANL-GrowthRate Forecasts") 
 
-ggplot(filter(hosp_pt_high2, model == "COVIDhub-ensemble")) + 
+
+ggplot(filter(hosp_pt_high, model == "COVIDhub-ensemble")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  geom_vline(aes(xintercept = as.Date("2021-02-13"), color = "red")) +
+ # geom_vline(aes(xintercept = as.Date("2021-02-13"), color = "red")) +
   labs(title = "COVIDhub-ensemble Forecasts")
 
-ggplot(filter(hosp_pt_high2, model == "GT-DeepCOVID")) + 
+ggplot(filter(hosp_pt_high, model == "GT-DeepCOVID")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
   labs(title = "GT-DeepCOVID Forecasts")
 
-ggplot(filter(hosp_pt_high2, model == "JHUAPL-Bucky")) + 
+ggplot(filter(hosp_pt_high, model == "JHUAPL-Bucky")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
+ # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
   labs(title = "JHUAPL-Bucky Forecasts")
 
 # truth data
@@ -489,26 +494,10 @@ Truth data has always shown day of the week effects (weekends always have lower 
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
 ###### Plot model forecasts and truth data for low hosp locs ---------------------------------------- #
-hosp_pt_low <- map_dfr(date_range,
-                 function(x) {
-                   covidHubUtils::load_latest_forecasts(last_forecast_date = x,
-                                                        forecast_date_window_size=6,
-                                                        # pick one
-                                                        locations = c("02", "15", "38", "50", "56"),
-                                                        types = "point",
-                                                        targets = paste0(1:28," day ahead inc hosp"),
-                                                        source = "zoltar")
-                   })
-  
-hosp_pt_low2 <- hosp_pt_low %>% 
+hosp_pt_low <- read.csv("./data/point_frame_hosp_bottom.csv")
+
+hosp_pt_low <- hosp_pt_low %>%
   select(-c(quantile, location, 11:16)) %>%
-#  dplyr::filter(weekdays(`target_end_date`) == weekdays(as.Date("2021-06-10"))) %>%
-  dplyr::mutate(horizon_week = case_when(
-    horizon %in% 1:7 ~ 1,
-    horizon %in% 8:14 ~ 2, 
-    horizon %in% 15:21 ~ 3,
-    horizon %in% 21:28 ~ 4,
-  )) %>%
   group_by(model, target_end_date, horizon_week) %>%
   mutate(cum_hosp = sum(value)) %>%
   distinct(cum_hosp, .keep_all = TRUE) %>%
@@ -516,33 +505,36 @@ hosp_pt_low2 <- hosp_pt_low %>%
   filter(horizon_week == 1) %>%
   mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
 
-ggplot(filter(hosp_pt_low2, model == "LANL-GrowthRate")) + 
+hosp_pt_low$target_end_date <- parse_date_time(hosp_pt_low$target_end_date, orders = "ymd")
+hosp_pt_low$day_type <- as.factor(hosp_pt_low$day_type)
+
+ggplot(filter(hosp_pt_low, model == "LANL-GrowthRate")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  geom_vline(aes(xintercept = as.Date("2021-05-22"), color = "red")) +
+ # geom_vline(aes(xintercept = as.Date("2021-05-22"), color = "red")) +
   labs(title = "LANL-GrowthRate Forecasts")
 
-ggplot(filter(hosp_pt_low2, model == "COVIDhub-ensemble")) + 
+ggplot(filter(hosp_pt_low, model == "COVIDhub-ensemble")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  geom_vline(aes(xintercept = as.Date("2021-02-13"), color = "red")) +
+ # geom_vline(aes(xintercept = as.Date("2021-02-13"), color = "red")) +
   labs(title = "COVIDhub-ensemble Forecasts")
 
-ggplot(filter(hosp_pt_low2, model == "GT-DeepCOVID")) + 
+ggplot(filter(hosp_pt_low, model == "GT-DeepCOVID")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
   labs(title = "GT-DeepCOVID Forecasts")
 
-ggplot(filter(hosp_pt_low2, model == "JHUAPL-Bucky")) + 
+ggplot(filter(hosp_pt_low, model == "JHUAPL-Bucky")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
+ # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
   labs(title = "JHUAPL-Bucky Forecasts")
 
 # truth data
 
 hosp_truth_low2 <- hosp_truth_low %>% 
-  select(-c(location, 6:11)) %>%
+ # select(-c(location, 6:11)) %>%
   group_by(target_end_date) %>%
   mutate(cum_hosp = sum(value)) %>%
   distinct(cum_hosp, .keep_all = TRUE) %>%
@@ -561,7 +553,9 @@ The low hosp location truth data doesn't present such a clear pattern as to day 
 hosp_truth_ca_ny <- hosp_truth_high %>%
   filter(location %in% c("06", "36"))
   
-hosp_pt_ca_ny <- hosp_pt_high %>% 
+hosp_pt_ca_ny <- read.csv("./data/point_frame_hosp_top.csv")  
+
+hosp_pt_ca_ny <- hosp_pt_ca_ny %>% 
   select(-c(quantile, forecast_date, type, temporal_resolution)) %>%
   dplyr::mutate(horizon_week = case_when(
     horizon %in% 1:7 ~ 1,
@@ -569,7 +563,7 @@ hosp_pt_ca_ny <- hosp_pt_high %>%
     horizon %in% 15:21 ~ 3,
     horizon %in% 21:28 ~ 4,
   )) %>%
-  filter(location %in% c("06", "36")) %>%
+  filter(location %in% c("6", "36")) %>%
   filter(target_end_date >= as.Date("2021-01-07"), target_end_date <= as.Date("2021-06-10"))  %>%
   filter(model %in% c("JHUAPL-SLPHospEns", "COVIDhub-ensemble")) %>%
   filter(horizon_week == 1) %>%
@@ -593,7 +587,6 @@ ggplot(hosp_truth_forecast_ca_ny,
             legend.key.size = unit(0.5, 'cm'))+
       scale_x_date(date_breaks = "1 month",
                    date_labels = "%m-%y")
-```
 ```
 
 
