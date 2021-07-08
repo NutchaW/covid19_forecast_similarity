@@ -98,3 +98,52 @@ hosp_forecasts_low <- hosp_forecasts_low %>%
 # write large files
 write_csv(hosp_forecasts_low,file = "./data/quantile_frame_hosp_bottom.csv")
 
+
+
+###### Point Forecasts ---------------------------------------------------- ##########################
+hosp_pt_high <- map_dfr(date_range,
+                        function(x) {
+                          covidHubUtils::load_latest_forecasts(last_forecast_date = x,
+                                                               forecast_date_window_size=6,
+                                                               # pick one
+                                                               locations = hlocs_high,
+                                                               types = "point",
+                                                               targets = target_list,
+                                                               source = "zoltar")
+                        })
+
+#create new col to make division of forecasts - by "week" (7 days of forecasts grouped together)
+hosp_pt_high <- hosp_pt_high %>% 
+  dplyr::mutate(horizon_week = case_when(
+    horizon %in% 1:7 ~ 1,
+    horizon %in% 8:14 ~ 2, 
+    horizon %in% 15:21 ~ 3,
+    horizon %in% 21:28 ~ 4,
+  )) 
+
+# write large files
+write_csv(hosp_pt_high,file = "./data/point_frame_hosp_top.csv")
+
+##
+hosp_pt_low <- map_dfr(date_range,
+                        function(x) {
+                          covidHubUtils::load_latest_forecasts(last_forecast_date = x,
+                                                               forecast_date_window_size=6,
+                                                               # pick one
+                                                               locations = hlocs_low,
+                                                               types = "point",
+                                                               targets = target_list,
+                                                               source = "zoltar")
+                        })
+
+#create new col to make division of forecasts - by "week" (7 days of forecasts grouped together)
+hosp_pt_low <- hosp_pt_low %>% 
+  dplyr::mutate(horizon_week = case_when(
+    horizon %in% 1:7 ~ 1,
+    horizon %in% 8:14 ~ 2, 
+    horizon %in% 15:21 ~ 3,
+    horizon %in% 21:28 ~ 4,
+  )) 
+
+# write large files
+write_csv(hosp_pt_low,file = "./data/point_frame_hosp_bottom.csv")
