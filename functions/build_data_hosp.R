@@ -99,62 +99,51 @@ hosp_forecasts_low <- hosp_forecasts_low %>%
 write_csv(hosp_forecasts_low,file = "./data/quantile_frame_hosp_bottom.csv")
 
 
-######################################### smaller toy data set to play around with
 
-date_range_small <- seq.Date(from = as.Date("2021-04-22"), to = most_recent_end_date, by = "week")
+###### Point Forecasts ---------------------------------------------------- ##########################
+hosp_pt_high <- map_dfr(date_range,
+                        function(x) {
+                          covidHubUtils::load_latest_forecasts(last_forecast_date = x,
+                                                               forecast_date_window_size=6,
+                                                               # pick one
+                                                               locations = hlocs_high,
+                                                               types = "point",
+                                                               targets = target_list,
+                                                               source = "zoltar")
+                        })
 
-hosp_forecasts_small <- map_dfr(date_range_small,
-                          function(x) {
-                            covidHubUtils::load_latest_forecasts(models = c("CU-scenario_low", "JHUAPL-Gecko",
-                                                                            "JHUAPL-SLPHospEns", "COVIDhub-ensemble",
-                                                                            "LANL-GrowthRate"),
-                                                                 last_forecast_date = x,
-                                                                 forecast_date_window_size=6,
-                                                                 # pick one
-                                                                 locations = c("06"),
-                                                                 types = "point",
-                                                                 targets = target_list,
-                                                                 source = "zoltar")
-                          })
-
-# make easier to read and filter target end dates to be a single day (Thursdays)
-hosp_forecasts_small_filtered <- hosp_forecasts_small %>%
-  dplyr::select(-c(`location_name`, `geo_value`, `full_location_name`, `geo_type`,
-                   `location`, `quantile`, `population`)) %>%
-  dplyr::filter(weekdays(`target_end_date`) == weekdays(most_recent_end_date)) %>%
+#create new col to make division of forecasts - by "week" (7 days of forecasts grouped together)
+hosp_pt_high <- hosp_pt_high %>% 
   dplyr::mutate(horizon_week = case_when(
     horizon %in% 1:7 ~ 1,
     horizon %in% 8:14 ~ 2, 
     horizon %in% 15:21 ~ 3,
     horizon %in% 21:28 ~ 4,
-  ))
+  )) 
 
+# write large files
+write_csv(hosp_pt_high,file = "./data/point_frame_hosp_top.csv")
 
-#####
+##
+hosp_pt_low <- map_dfr(date_range,
+                        function(x) {
+                          covidHubUtils::load_latest_forecasts(last_forecast_date = x,
+                                                               forecast_date_window_size=6,
+                                                               # pick one
+                                                               locations = hlocs_low,
+                                                               types = "point",
+                                                               targets = target_list,
+                                                               source = "zoltar")
+                        })
 
-hfs <- map_dfr(date_range,
-                                function(x) {
-                                  covidHubUtils::load_latest_forecasts(
-                                                                       last_forecast_date = x,
-                                                                       forecast_date_window_size=6,
-                                                                       # pick one
-                                                                       locations = c("06", "36", "US"),
-                                                                       types = "point",
-                                                                       targets = target_list,
-                                                                       source = "zoltar")
-                                })
-
-# make easier to read and filter target end dates to be a single day (Thursdays)
-hfs_filtered <- hfs %>%
-  dplyr::select(-c(`location_name`, `geo_value`, `full_location_name`, `geo_type`,
-                   `location`, `quantile`, `population`)) %>%
-  dplyr::filter(weekdays(`target_end_date`) == weekdays(most_recent_end_date)) %>%
+#create new col to make division of forecasts - by "week" (7 days of forecasts grouped together)
+hosp_pt_low <- hosp_pt_low %>% 
   dplyr::mutate(horizon_week = case_when(
     horizon %in% 1:7 ~ 1,
     horizon %in% 8:14 ~ 2, 
     horizon %in% 15:21 ~ 3,
     horizon %in% 21:28 ~ 4,
-  ))
+  )) 
 
-test <- hfs_filtered %>%
-  dplyr::filter(horizon_week == 1, target_end_date == "2021-06-10", model == "CU-select", model == "GT-DeepCOVID")
+# write large files
+write_csv(hosp_pt_low,file = "./data/point_frame_hosp_bottom.csv")
