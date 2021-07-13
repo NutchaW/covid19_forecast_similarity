@@ -117,13 +117,15 @@ metadata$data_source <- ifelse(metadata$JHU_data,"JHU","unspecified")
 
 # each target will have different sets of models based on the current filtering
 ## high count
-wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv") 
+wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv")
+wide_frame_hosp_high$target_end_date <- parse_date_time(wide_frame_hosp_high$target_end_date, orders = "ymd")
 
 h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
 
 ## low count
 wide_frame_hosp_low <- read.csv("./data/quantile_frame_hosp_bottom.csv")
+wide_frame_hosp_low$target_end_date <- parse_date_time(wide_frame_hosp_low$target_end_date, orders = "ymd")
 
 h_frame_low <- wide_frame_hosp_low %>% 
   frame_format2()
@@ -131,6 +133,28 @@ h_frame_low <- wide_frame_hosp_low %>%
 # model type
 h_meta <- colnames(h_frame_high)[-c(1:6)] #note the same 5 models for high and low counts
 ```
+
+```{r}
+# find models that don't forecast for a long enough date range
+summary <- wide_frame_hosp_high %>% 
+  filter(location == "6", quantile == 0.05, horizon_week == 1) %>%
+  select(model, forecast_date, target_end_date, horizon_week) %>%
+  group_by(model) %>%
+  summarise(n())
+little_models <- summary %>%
+  filter(`n()` < 20, model != "UCLA-SuEIR") %>% 
+  #UCLA-SuEIR doesn't have all locations and was already eliminated
+  pull(model)
+
+dr <- seq.Date(from = as.Date("2021-01-14"), to = as.Date("2021-06-10"), by = "week")
+
+forecasts_short <- filter(wide_frame_hosp_high, 
+                               target_end_date >= as.Date("2021-01-28"), # gives 8 models (single CU)
+                               target_end_date <= as.Date("2021-06-10"))
+
+f_short <- frame_format2(forecasts_short)
+```
+
 
 
 ```{r}
@@ -588,6 +612,90 @@ ggplot(hosp_truth_forecast_ca_ny,
       scale_x_date(date_breaks = "1 month",
                    date_labels = "%m-%y")
 ```
+
+```{r}
+truth_high <- load_truth("HealthData", 
+                         "inc hosp", 
+                         temporal_resolution="weekly",
+                         data_location = "remote_hub_repo") %>%
+   dplyr::filter(geo_type=="state",
+                 location_name %in% unique(wide_frame_hosp_high$location_name)) %>%
+  select(c(target_end_date, location_name, value)) %>% # could remove target_end_date
+  mutate(align_date = target_end_date %m+% weeks(1))
+
+
+test <- wide_frame_hosp_high %>%
+ # group_by(target_end_date, location_name) %>%
+  left_join(truth_high, by = c("target_end_date" = "align_date", "location_name")) %>% 
+  filter(target_end_date >= as.Date("2021-01-07"), target_end_date <= as.Date("2021-06-10")) %>%
+  rename(prior_truth = `value.y`) %>%
+  mutate(scaled_value = value.x/prior_truth)
+
+ggplot(filter(test, model %in% c("COVIDhub-ensemble", "JHUAPL-SLPHospEns")), 
+       aes(x = target_end_date, y = scaled_value, color = model, shape = location_name)) + 
+      geom_point(alpha=0.6) + 
+      geom_line() +
+      ggtitle("Hosp Truth and Forecasts Over Time") +
+      ylab("Inc Hosp") +
+      xlab("Forecast End Date") +
+      theme(legend.text = element_text(size=5),
+            legend.title = element_text(size=9),
+            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            legend.key.size = unit(0.5, 'cm'))
+
+###########
+
+
+
+#Prepare
+Bad_Data$Lower_Bound <- Lower_Bound$C
+Bad_Data$Upper_Bound <- Upper_Bound$C
+
+#Plot
+library(ggplot2)
+p <- ggplot(Bad_Data, aes(x = Q, y = C, color=Name, group=Name))
+p <- p + geom_line()
+p + geom_ribbon(aes(ymin=Lower_Bound, ymax=Upper_Bound), 
+                alpha=0.1,       #transparency
+                linetype=1,      #solid, dashed or other line types
+                colour="grey70", #border line color
+                size=1,          #border line size
+                fill="green")    #fill color
+
+#############
+quantiles <- unique(test$quantile)
+graph <- ggplot2::ggplot(data = test, ggplot2::aes(x= target_end_date))
+ graph  +
+      ggplot2::geom_ribbon(data = test,
+                mapping = ggplot2::aes(ymin=min(quantiles), 
+                                       ymax=max(quantiles),
+                                       group = interaction(`Prediction Interval`, model, 
+                                                           location, forecast_date),
+                                       fill = interaction(`Prediction Interval`, model)),
+                alpha = 1.0, show.legend=FALSE) +
+      ggplot2::scale_fill_manual(name = "Prediction Interval"
+                                 #, values = interval_colors
+                                 ) +
+      # create a transparent layer with grey colors to get prediction interval legend
+      ggnewscale::new_scale_fill() +
+      ggplot2::geom_ribbon(data = test %>%
+                             dplyr::filter(type == "quantile"),
+                           mapping = ggplot2::aes(ymin=min(quantiles), 
+                                                  ymax=max(quantiles), 
+                                                  fill = `Prediction Interval`), 
+                           alpha = 0) +
+#      ggplot2::scale_fill_manual(name = "Prediction Interval", values = ribbon_colors) +
+      # create a transparent layer for models legend when point forecasts are not plotted
+      # models legend will be covered if point forecasts are plotted
+      ggplot2::geom_line(data = test %>%
+                           dplyr::filter(type == "quantile"),
+                         mapping = ggplot2::aes(y = max(quantiles), colour = model), alpha = 0) +
+#      ggplot2::scale_color_manual(name = "Model", values = forecast_colors) +
+      # reset alpha in legend fill
+      ggplot2::guides(
+        fill = ggplot2::guide_legend(override.aes = list(alpha = 1)))
+```
+
 
 
 We can also cluster the distances using hierarchical clustering. 
