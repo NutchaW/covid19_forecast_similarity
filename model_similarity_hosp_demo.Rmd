@@ -359,9 +359,7 @@ hosp_pt_low <- hosp_pt_low %>%
 hosp_pt_low$target_end_date <- parse_date_time(hosp_pt_low$target_end_date, orders = "ymd")
 hosp_pt_low$day_type <- as.factor(hosp_pt_low$day_type)
 
-plot_day_of_week_effect(hosp_pt_low, "LANL-GrowthRate") # as.Date("2021-05-22")
 plot_day_of_week_effect(hosp_pt_low, "COVIDhub-ensemble") # as.Date("2021-02-13")
-plot_day_of_week_effect(hosp_pt_low, "GT-DeepCOVID") 
 plot_day_of_week_effect(hosp_pt_low, "JHUAPL-Bucky") # as.Date("2021-02-27")
 plot_day_of_week_effect(hosp_pt_low, "Google_Harvard-CPF") 
 plot_day_of_week_effect(hosp_pt_low, "Karlen-pypm") 
