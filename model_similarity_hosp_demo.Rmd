@@ -102,7 +102,6 @@ metadata$ensemble <- ifelse(metadata$ensemble==TRUE,1,0)
 metadata$compartmental <- ifelse(metadata$compartmental==TRUE,1,0)
 metadata$stats <- ifelse(metadata$stats==TRUE,1,0)
 # manual change 
-#metadata <- mutate(filter(metadata, model_abbr == "Karlen-pypm"), model_type = "mechanistic")
 # add text columns
 metadata$model_type <- ifelse(metadata$ensemble, 
                                   "ensemble", 
@@ -274,23 +273,6 @@ There are nine models that fulfilled the criteria for both the five locations wi
 ```{r}
 knitr::kable(short_hmeta, col.names = c("Model","Type"))
 ```
-
-### Differences between two approximations (for high count locations only)
-
-The approximated pairwise Cramer's distances between each forecast and the ensemble are calculated using both types of approximations to check for any large discrepancies between the two methods. The table below shows the averaged approx. CD over all target end dates and all 5 high count locations.
-
-```{r}
-approx_cd_list_high[[3]] %>%
-  dplyr::left_join(approx_cd_list2_high[[3]], by=c("horizon","model_1","model_2","target_variable")) %>%
-  dplyr::filter(model_1=="COVIDhub-ensemble") %>%
-  dplyr::mutate(diff=mean_dis.x-mean_dis.y) %>%
-  dplyr::arrange(model_1,horizon,diff) %>%
-  knitr::kable(.,col.names=c("Anchor Model", "Model","Horizon","Target",
-                                     "CD (uneq)","CD (eq)","Diff"),digits=2,
-               caption = "Mean approx. CDs relative to the ensemble")
-```
-
-We notice that Google_Harvard-CPF has much higher equal and unequal Cramer's Distance values compared to the other models. Its difference between its equal and unequal Cramer Distances is also higher than the other models, but not by the same striking difference. The next model with a large difference is Covid19Sim-Simulator.
 
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
