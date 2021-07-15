@@ -314,18 +314,17 @@ hosp_pt_high <- hosp_pt_high %>%
 hosp_pt_high$target_end_date <- parse_date_time(hosp_pt_high$target_end_date, orders = "ymd")
 hosp_pt_high$day_type <- as.factor(hosp_pt_high$day_type)
 
-# ggplot(hosp_pt_high) + 
-#   geom_point(aes(x = target_end_date, y = cum_hosp, color = model, shape = day_type, alpha = 0.5)) +
-#   geom_line(aes(x = target_end_date, y = cum_hosp, color = model)) +
-#   facet_wrap(vars(model))
+ggplot(hosp_pt_high) +
+  geom_point(aes(x = target_end_date, y = cum_hosp, color = model, shape = day_type, alpha = 0.5)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp, color = model)) +
+  facet_wrap(vars(model))
 
-plot_day_of_week_effect(hosp_pt_high, "LANL-GrowthRate") # as.Date("2021-05-22")
-plot_day_of_week_effect(hosp_pt_high, "COVIDhub-ensemble") # as.Date("2021-02-13")
-plot_day_of_week_effect(hosp_pt_high, "GT-DeepCOVID") 
-plot_day_of_week_effect(hosp_pt_high, "JHUAPL-Bucky") # as.Date("2021-02-27")
-plot_day_of_week_effect(hosp_pt_high, "Google_Harvard-CPF") 
-plot_day_of_week_effect(hosp_pt_high, "Karlen-pypm") 
-plot_day_of_week_effect(hosp_pt_high, "JHUAPL-SLPHospEns") 
+
+plot_day_of_week_effect(hosp_pt_high, "COVIDhub-ensemble") # as.Date("2021-02-13"), mon
+plot_day_of_week_effect(hosp_pt_high, "JHUAPL-Bucky") # as.Date("2021-02-27"), Mon
+plot_day_of_week_effect(hosp_pt_high, "Google_Harvard-CPF") # forecasts made on Mon
+plot_day_of_week_effect(hosp_pt_high, "Karlen-pypm") # forecasts made on Sunday - likely no weekday effects
+plot_day_of_week_effect(hosp_pt_high, "JHUAPL-SLPHospEns") # forecasts made on Monday - likely no weekday effects
 
 # truth data
 
