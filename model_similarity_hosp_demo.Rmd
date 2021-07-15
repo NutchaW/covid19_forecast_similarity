@@ -1,7 +1,7 @@
 ---
 title: "Forecasting Model Similarity (for inc hosp)"
 author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit, Li Shandross"
-date: "06/28/2021"
+date: "07/15/2021"
 header-includes:
    - \usepackage{tabularx}
    - \usepackage{hyperref}
@@ -44,7 +44,7 @@ We must first make some adjustments to the inc hosp forecast data, which have a 
 This initial analysis only examines target end dates for a single day of the week, Thursday, to account for models that include day of the week effects. However, this will be expanded later to more days, perhaps even exploring if performing the analysis on different days of the week leads to different results in terms of model similarity.
 
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all targets, all probability levels, and no missing forecasts between December 17th, 2020 and June 10th 2021. We aggregate results for the five locations that have the highest number of number of COVID-19 hospitalizations during this period as well as the five locations with the lowest number for the same date range.
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all targets, all probability levels, and no missing forecasts between January 28th, 2020 and June 10th 2021. We aggregate results for the five locations that have the highest number of number of COVID-19 hospitalizations during this period as well as the five locations with the lowest number for the same date range.
 
 
 ```{r}
@@ -87,6 +87,7 @@ frame_format2 <- function(zoltr_frame){
 } 
 ```
 
+
 ```{r}
 source("./functions/distance_func_script.R")
 # set targets for analysis
@@ -117,44 +118,25 @@ metadata$data_source <- ifelse(metadata$JHU_data,"JHU","unspecified")
 
 # each target will have different sets of models based on the current filtering
 ## high count
-wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv")
+wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv") %>%
+  dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
 wide_frame_hosp_high$target_end_date <- parse_date_time(wide_frame_hosp_high$target_end_date, orders = "ymd")
+
 
 h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
 
 ## low count
-wide_frame_hosp_low <- read.csv("./data/quantile_frame_hosp_bottom.csv")
+wide_frame_hosp_low <- read.csv("./data/quantile_frame_hosp_bottom.csv") %>%
+  dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
 wide_frame_hosp_low$target_end_date <- parse_date_time(wide_frame_hosp_low$target_end_date, orders = "ymd")
 
 h_frame_low <- wide_frame_hosp_low %>% 
   frame_format2()
 
 # model type
-h_meta <- colnames(h_frame_high)[-c(1:6)] #note the same 5 models for high and low counts
+h_meta <- colnames(h_frame_high)[-c(1:6)] #note the same 9 models for high and low counts
 ```
-
-```{r}
-# find models that don't forecast for a long enough date range
-summary <- wide_frame_hosp_high %>% 
-  filter(location == "6", quantile == 0.05, horizon_week == 1) %>%
-  select(model, forecast_date, target_end_date, horizon_week) %>%
-  group_by(model) %>%
-  summarise(n())
-little_models <- summary %>%
-  filter(`n()` < 20, model != "UCLA-SuEIR") %>% 
-  #UCLA-SuEIR doesn't have all locations and was already eliminated
-  pull(model)
-
-dr <- seq.Date(from = as.Date("2021-01-14"), to = as.Date("2021-06-10"), by = "week")
-
-forecasts_short <- filter(wide_frame_hosp_high, 
-                               target_end_date >= as.Date("2021-01-28"), # gives 8 models (single CU)
-                               target_end_date <= as.Date("2021-06-10"))
-
-f_short <- frame_format2(forecasts_short)
-```
-
 
 
 ```{r}
@@ -167,8 +149,8 @@ recent_hmeta <- h_metadata %>%
   dplyr::group_by(model_abbr) %>%
   dplyr::filter(date==max(as.POSIXct(date))) %>%
   dplyr::ungroup()
-recent_hmeta[5,24] <- "mechanistic" # change the Karlen model to mech
-recent_hmeta[3,6] <- "public mobility data, CSSE, HHS, CDC scenario 5 data" 
+recent_hmeta[8,24] <- "mechanistic" # change the Karlen model to mech
+recent_hmeta[5,6] <- "public mobility data, CSSE, HHS, CDC scenario 5 data" 
 short_hmeta <- recent_hmeta[,c(3,ncol(recent_hmeta)-1)]
 short_hdata <- recent_hmeta[,c(3,ncol(recent_hmeta))]
 
@@ -284,7 +266,7 @@ pair_data_low <- approx_cd_list_low[[3]] %>%
   dplyr::filter(model_1!=model_2)
 ```
 
-There are 5 models that fulfilled the criteria for both the 5 locations with highest cumulative deaths and the 5 locations with lowest cumulative deaths.
+There are nine models that fulfilled the criteria for both the five locations with highest cumulative deaths and the five locations with lowest cumulative deaths.
 
 
 ### Model types
@@ -308,7 +290,7 @@ approx_cd_list_high[[3]] %>%
                caption = "Mean approx. CDs relative to the ensemble")
 ```
 
-We notice that Covid19Sim-Simulator has a much higher difference between its equal and unequal Cramer Distances compared to the other models, except for at a four week horizon, where JHUAPL-Bucky has a similarly high difference between its Cramer Distances.
+We notice that Google_Harvard-CPF has much higher equal and unequal Cramer's Distance values compared to the other models. Its difference between its equal and unequal Cramer Distances is also higher than the other models, but not by the same striking difference. The next model with a large difference is Covid19Sim-Simulator.
 
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
@@ -322,7 +304,7 @@ distance_heatmap(approx_cd_list_low[[3]],
                 recent_hmeta)
 ```
 
-It appears that the Covid19Sim-Simulator is the least similar to the other models for both the high count and low count locations, across all four horizons. JHUAPL-Bucky is the second least similar to the other models. However, high hospitalization count locations show a greater variation between models, especially at lower horizons. In low count locations, Covid19Sim-Simulator and JHUAPL-Bucky have more similar Cramer Distances. Of note is the greater difference between model at low horizons for high count locations, which is the opposite of the results shown for inc cases and inc deaths. 
+Google_Harvard-CPF is generally the least similar to the other models for both the high count and low count locations. This is true across all horizons for the high count locations, but only true for one and two week horizons of the low count locations. Covid19Sim-Simulator and JHUAPL-Bucky show similar Cramer's Distances at three and four week horizons at the low count locations. Covid19Sim-Simulator is the second least similar model for the high count locations, but its Cramer's Distance is much smaller than that of Google_Harvard-CPF. Of note is similar differences between models at all horizons for high count locations, unlike the results shown for inc cases and inc deaths which show substantial differences between models as horizon length increases. 
 
 
 We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
@@ -351,7 +333,7 @@ scatter(ot_data_low,
         smooth_tf = TRUE) 
 ```
 
-The scatterplots show that the Covid19Sim-Simulator and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other two models. This seems to align with the results shown in the heat maps above that show that Covid19Sim-Simulator and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Covid19Sim-Simulator is very different from the ensemble model from January until April. However, in low count locations, JHUAPL-Bucky shows a peak in late March/early April, although this peak is not largely different, as the scale is pretty small. 
+The scatterplots show that the Google_Harvard-CPF, Covid19Sim-Simulator, and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other models. This seems to align with the results shown in the heat maps above that show that Google_Harvard-CPF, Covid19Sim-Simulator, and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Google_Harvard-CPF is very different from the ensemble model from February until April. However, in low count locations, JHUAPL-Bucky shows a peak in around March, although this peak is not largely different, as the scale is pretty small. 
 
 ```{r,out.width="95%", fig.align='center', warning=FALSE, message=FALSE}
 date_range <- seq.Date(from = as.Date("2020-12-17"), to = as.Date("2021-06-10"), by = "week")
@@ -405,21 +387,21 @@ ggplot(hosp_truth_low, aes(x = target_end_date, y = value, color = location_name
       scale_x_date(date_breaks = "1 month",
                    date_labels = "%m-%y")
 ```
-It seems that the Covid19Sim-Simulator's differences from the ensemble model are follow the trends shown by the truth data. 
+It seems that Google_Harvard-CPF and Covid19Sim-Simulator's differences from the ensemble model follow the trends shown by the truth data. 
 
 
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
 cd_diff_high <- total_frame_high %>%
   dplyr::group_by(horizon,target_end_date) %>%
-  dplyr::filter(model_1 =="JHUAPL-Bucky",
+  dplyr::filter(model_1 =="Google_Harvard-CPF",
                 model_2 == "Covid19Sim-Simulator") %>%
   dplyr:: ungroup() 
 
 ggplot(cd_diff_high, aes(x=target_end_date, y=mean_approx_cd)) + 
    #   geom_point(alpha=0.6,size=0.8) + 
       geom_line(alpha=0.4) +
-      ggtitle("Approx CD over Time - Covid19Sim-Simulator and JHUAPL-Bucky") +
+      ggtitle("Approx CD over Time - Covid19Sim-Simulator and Google_Harvard-CPF") +
       ylab("Approx. CD") +
       xlab("Forecast End Date") +
       facet_wrap(vars(horizon), nrow = 2,scales = "free") +
@@ -433,14 +415,14 @@ ggplot(cd_diff_high, aes(x=target_end_date, y=mean_approx_cd)) +
 
 cd_diff_low <- total_frame_low %>%
   dplyr::group_by(horizon,target_end_date) %>%
-  dplyr::filter(model_1 =="JHUAPL-Bucky",
+  dplyr::filter(model_1 =="Google_Harvard-CPF",
                 model_2 == "Covid19Sim-Simulator") %>%
   dplyr:: ungroup() 
 
 ggplot(cd_diff_low, aes(x=target_end_date, y=mean_approx_cd)) + 
    #   geom_point(alpha=0.6,size=0.8) + 
       geom_line(alpha=0.4) +
-      ggtitle("Approx CD over Time - Covid19Sim-Simulator and JHUAPL-Bucky") +
+      ggtitle("Approx CD over Time - Covid19Sim-Simulator and Google_Harvard-CPF") +
       ylab("Approx. CD") +
       xlab("Forecast End Date") +
       facet_wrap(vars(horizon), nrow = 2,scales = "free") +
@@ -451,11 +433,11 @@ ggplot(cd_diff_low, aes(x=target_end_date, y=mean_approx_cd)) +
       scale_x_date(date_breaks = "1 month",
                    date_labels = "%m-%y")
 ```
-
+These plots indicate that the difference between the models at the high count locations seems to shrink over time. Since the low count locations approx CD is so low, it is difficult to draw conclusions from the plots. 
 
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
-###### Plot model forecasts and truth data for high hosp locs ---------------------------------------- #
+###### Plot model forecasts and truth data for high hosp locs -------------------------------------- #
 hosp_pt_high <- read.csv("./data/point_frame_hosp_top.csv")
 
 hosp_pt_high <- hosp_pt_high %>%
@@ -463,7 +445,7 @@ hosp_pt_high <- hosp_pt_high %>%
   group_by(model, target_end_date, horizon_week, horizon) %>%
   mutate(cum_hosp = sum(value)) %>%
   distinct(cum_hosp, .keep_all = TRUE) %>%
-  filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky")) %>%
+  #filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky", "Google_Harvard-CPF")) %>%
   filter(horizon_week == 1) %>%
   mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
 
@@ -499,6 +481,24 @@ ggplot(filter(hosp_pt_high, model == "JHUAPL-Bucky")) +
  # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
   labs(title = "JHUAPL-Bucky Forecasts")
 
+ggplot(filter(hosp_pt_high, model == "Google_Harvard-CPF")) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+ # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
+  labs(title = "Google_Harvard-CPF")
+
+ggplot(filter(hosp_pt_high, model == "Karlen-pypm")) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+ # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
+  labs(title = "Karlen-pypm ")
+
+ggplot(filter(hosp_pt_high, model == "JHUAPL-SLPHospEns")) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+  #geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
+  labs(title = "JHUAPL-SLPHospEns")  
+
 # truth data
 
 hosp_truth_high2 <- hosp_truth_high %>% 
@@ -525,18 +525,19 @@ hosp_pt_low <- hosp_pt_low %>%
   group_by(model, target_end_date, horizon_week) %>%
   mutate(cum_hosp = sum(value)) %>%
   distinct(cum_hosp, .keep_all = TRUE) %>%
-  filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky")) %>%
+  #filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky")) %>%
   filter(horizon_week == 1) %>%
   mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
 
 hosp_pt_low$target_end_date <- parse_date_time(hosp_pt_low$target_end_date, orders = "ymd")
 hosp_pt_low$day_type <- as.factor(hosp_pt_low$day_type)
 
-ggplot(filter(hosp_pt_low, model == "LANL-GrowthRate")) + 
+ggplot(filter(hosp_pt_high, model == "LANL-GrowthRate")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
   geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-05-22"), color = "red")) +
-  labs(title = "LANL-GrowthRate Forecasts")
+#  geom_vline(aes(xintercept = as.Date("2021-05-22"), color = "red")) +
+  labs(title = "LANL-GrowthRate Forecasts") 
+
 
 ggplot(filter(hosp_pt_low, model == "COVIDhub-ensemble")) + 
   geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
@@ -555,6 +556,24 @@ ggplot(filter(hosp_pt_low, model == "JHUAPL-Bucky")) +
  # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
   labs(title = "JHUAPL-Bucky Forecasts")
 
+ggplot(filter(hosp_pt_low, model == "Google_Harvard-CPF")) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+ # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
+  labs(title = "Google_Harvard-CPF")
+
+ggplot(filter(hosp_pt_low, model == "Karlen-pypm")) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+ # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
+  labs(title = "Karlen-pypm ")
+
+ggplot(filter(hosp_pt_low, model == "JHUAPL-SLPHospEns")) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+  #geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
+  labs(title = "JHUAPL-SLPHospEns")  
+
 # truth data
 
 hosp_truth_low2 <- hosp_truth_low %>% 
@@ -570,8 +589,8 @@ ggplot(hosp_truth_low2) +
   labs(title = "Truth Data")
 ```
 
-
 The low hosp location truth data doesn't present such a clear pattern as to day of the week effects that suggest that weekends or weekdays generally have less inc hosp values. However, most of the models seem to switch to incorporating a day of the week effect at about the same time as that for the high count values. 
+
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
 hosp_truth_ca_ny <- hosp_truth_high %>%
@@ -613,7 +632,7 @@ ggplot(hosp_truth_forecast_ca_ny,
                    date_labels = "%m-%y")
 ```
 
-```{r}
+```{r don't run}
 truth_high <- load_truth("HealthData", 
                          "inc hosp", 
                          temporal_resolution="weekly",
@@ -724,9 +743,9 @@ grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
 grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
 ```
 
-For both high count and low count locations, all of the dendrograms show that Covid19Sim-Simulator is the most dissimilar to the other models, followed by JHUAPL-Bucky. However, the scale for differences in Cramer Distance for the low count locations is very small, which may be a result of low hospitalizations.
+For both high count and low count locations, all of the dendrograms show that Google_Harvard-CPF is generally the most dissimilar to the other models, and substantially so for the high count locations, followed by Covid19Sim-Simulator. However, the scale for differences in Cramer Distance for the low count locations is very small, which may be a result of low hospitalizations, which may explain why Google_Harvard-CPF and Covid19Sim-Simulator show similar Cramer's Distances for low count locations. We can also see that the ensembles are the most similar among models.
 
    
 
-Overall, it seems that Covid19Sim-Simulator and JHUAPL-Bucky are pretty consistently the two models then are the most dissimilar from the other three models, across almost all horizons for both high-count and low count regions. 
+Overall, it seems that Google_Harvard-CPF is consistently the most dissimilar from the other models by a substantial amount, followed by Covid19Sim-Simulator, across almost all horizons for both high-count and low count regions. 
 
