@@ -93,6 +93,7 @@ source("./functions/distance_func_script.R")
 # set targets for analysis
 target_horizon <- 1:4
 target_var <- "inc hosp"
+
 # read in model metadata
 metadata <- read.csv("metadata_categorized.csv") 
 metadata$stats[which(metadata$team_name == "Karlen Working Group")] <- TRUE
@@ -115,15 +116,23 @@ metadata$model_type <- ifelse(metadata$ensemble,
 metadata$data_source <- ifelse(metadata$JHU_data,"JHU","unspecified")
 
 
-# each target will have different sets of models based on the current filtering
 ## high count
 wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv") %>%
   dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
 wide_frame_hosp_high$target_end_date <- parse_date_time(wide_frame_hosp_high$target_end_date, orders = "ymd")
 
-
 h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
+
+hosp_truth_high <- load_truth("HealthData", 
+                         "inc hosp", 
+                         temporal_resolution="weekly",
+                         data_location = "remote_hub_repo") %>%
+  dplyr::filter(target_end_date >= min(unique(h_frame_high$target_end_date)),
+                target_end_date <= max(unique(h_frame_high$target_end_date)),
+                geo_type=="state",
+                location_name %in% unique(wide_frame_hosp_high$location_name)) 
+
 
 ## low count
 wide_frame_hosp_low <- read.csv("./data/quantile_frame_hosp_bottom.csv") %>%
@@ -133,8 +142,20 @@ wide_frame_hosp_low$target_end_date <- parse_date_time(wide_frame_hosp_low$targe
 h_frame_low <- wide_frame_hosp_low %>% 
   frame_format2()
 
+hosp_truth_low <- load_truth("HealthData", 
+                         "inc hosp", 
+                         temporal_resolution="weekly",
+                         data_location = "remote_hub_repo") %>%
+  dplyr::filter(target_end_date >= min(unique(h_frame_low$target_end_date)),
+                target_end_date <= max(unique(h_frame_low$target_end_date)),
+                geo_type=="state",
+                location_name %in% unique(wide_frame_hosp_low$location_name)) 
+
 # model type
 h_meta <- colnames(h_frame_high)[-c(1:6)] #note the same 9 models for high and low counts
+
+
+date_range <- seq.Date(from = as.Date("2021-02-18"), to = as.Date("2021-06-10"), by = "week")
 ```
 
 
@@ -267,11 +288,107 @@ pair_data_low <- approx_cd_list_low[[3]] %>%
 
 There are nine models that fulfilled the criteria for both the five locations with highest cumulative deaths and the five locations with lowest cumulative deaths.
 
+### Day of the Week Effects
+
+We can plot point forecasts to see if any of the models incorporate day of the week effects (i.e. do forecasts certain days of the week specifically show lower/higher hospitalizations compared to other days). 
+
+```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
+plot_day_of_week_effect <- function(point_forecasts, model_name) {
+  ggplot(filter(point_forecasts, model == model_name)) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+  labs(title = paste(model_name, "Forecasts")) 
+}
+
+###### Plot model forecasts and truth data for high hosp locs -------------------------------------- #
+hosp_pt_high <- read.csv("./data/point_frame_hosp_top.csv")
+
+hosp_pt_high <- hosp_pt_high %>%
+  select(-c(quantile, location, 11:16)) %>%
+  group_by(model, target_end_date, horizon_week, horizon) %>%
+  mutate(cum_hosp = sum(value)) %>%
+  distinct(cum_hosp, .keep_all = TRUE) %>%
+  filter(horizon_week == 1) %>%
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+
+hosp_pt_high$target_end_date <- parse_date_time(hosp_pt_high$target_end_date, orders = "ymd")
+hosp_pt_high$day_type <- as.factor(hosp_pt_high$day_type)
+
+# ggplot(hosp_pt_high) + 
+#   geom_point(aes(x = target_end_date, y = cum_hosp, color = model, shape = day_type, alpha = 0.5)) +
+#   geom_line(aes(x = target_end_date, y = cum_hosp, color = model)) +
+#   facet_wrap(vars(model))
+
+plot_day_of_week_effect(hosp_pt_high, "LANL-GrowthRate") # as.Date("2021-05-22")
+plot_day_of_week_effect(hosp_pt_high, "COVIDhub-ensemble") # as.Date("2021-02-13")
+plot_day_of_week_effect(hosp_pt_high, "GT-DeepCOVID") 
+plot_day_of_week_effect(hosp_pt_high, "JHUAPL-Bucky") # as.Date("2021-02-27")
+plot_day_of_week_effect(hosp_pt_high, "Google_Harvard-CPF") 
+plot_day_of_week_effect(hosp_pt_high, "Karlen-pypm") 
+plot_day_of_week_effect(hosp_pt_high, "JHUAPL-SLPHospEns") 
+
+# truth data
+
+hosp_truth_high2 <- hosp_truth_high %>% 
+  select(-c(location, 6:11)) %>%
+  group_by(target_end_date) %>%
+  mutate(cum_hosp = sum(value)) %>%
+  distinct(cum_hosp, .keep_all = TRUE) %>%
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+
+ggplot(hosp_truth_high2) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+  labs(title = "Truth Data")
+```
+
+Truth data has always shown day of the week effects (weekends always have lower inc hosp) but the models seemed to predict lower inc hosp on Tuesdays for the end of December/beginning of January, then most seem to switch to lower weekend end inc hosp sometime during 2021. 
+
+```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
+###### Plot model forecasts and truth data for low hosp locs ---------------------------------------- #
+hosp_pt_low <- read.csv("./data/point_frame_hosp_bottom.csv")
+
+hosp_pt_low <- hosp_pt_low %>%
+  select(-c(quantile, location, 11:16)) %>%
+  group_by(model, target_end_date, horizon_week) %>%
+  mutate(cum_hosp = sum(value)) %>%
+  distinct(cum_hosp, .keep_all = TRUE) %>%
+  #filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky")) %>%
+  filter(horizon_week == 1) %>%
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+
+hosp_pt_low$target_end_date <- parse_date_time(hosp_pt_low$target_end_date, orders = "ymd")
+hosp_pt_low$day_type <- as.factor(hosp_pt_low$day_type)
+
+plot_day_of_week_effect(hosp_pt_low, "LANL-GrowthRate") # as.Date("2021-05-22")
+plot_day_of_week_effect(hosp_pt_low, "COVIDhub-ensemble") # as.Date("2021-02-13")
+plot_day_of_week_effect(hosp_pt_low, "GT-DeepCOVID") 
+plot_day_of_week_effect(hosp_pt_low, "JHUAPL-Bucky") # as.Date("2021-02-27")
+plot_day_of_week_effect(hosp_pt_low, "Google_Harvard-CPF") 
+plot_day_of_week_effect(hosp_pt_low, "Karlen-pypm") 
+plot_day_of_week_effect(hosp_pt_low, "JHUAPL-SLPHospEns") 
+
+# truth data
+
+hosp_truth_low2 <- hosp_truth_low %>% 
+ # select(-c(location, 6:11)) %>%
+  group_by(target_end_date) %>%
+  mutate(cum_hosp = sum(value)) %>%
+  distinct(cum_hosp, .keep_all = TRUE) %>%
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+
+ggplot(hosp_truth_low2) + 
+  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+  labs(title = "Truth Data")
+```
+
+The low hosp location truth data doesn't present such a clear pattern as to day of the week effects that suggest that weekends or weekdays generally have less inc hosp values. However, most of the models seem to switch to incorporating a day of the week effect at about the same time as that for the high count values. 
 
 ### Model types
 
 ```{r}
-knitr::kable(short_hmeta, col.names = c("Model","Type"))
+#knitr::kable(short_hmeta, col.names = c("Model","Type"))
 ```
 
 
@@ -318,7 +435,7 @@ scatter(ot_data_low,
 The scatterplots show that the Google_Harvard-CPF, Covid19Sim-Simulator, and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other models. This seems to align with the results shown in the heat maps above that show that Google_Harvard-CPF, Covid19Sim-Simulator, and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Google_Harvard-CPF is very different from the ensemble model from February until April. However, in low count locations, JHUAPL-Bucky shows a peak in around March, although this peak is not largely different, as the scale is pretty small. 
 
 ```{r,out.width="95%", fig.align='center', warning=FALSE, message=FALSE}
-date_range <- seq.Date(from = as.Date("2020-12-17"), to = as.Date("2021-06-10"), by = "week")
+date_range <- seq.Date(from = as.Date("2021-01-28"), to = as.Date("2021-06-10"), by = "week")
 
 hosp_truth_high <- load_truth("HealthData", 
                          "inc hosp", 
@@ -417,161 +534,6 @@ ggplot(cd_diff_low, aes(x=target_end_date, y=mean_approx_cd)) +
 ```
 These plots indicate that the difference between the models at the high count locations seems to shrink over time. Since the low count locations approx CD is so low, it is difficult to draw conclusions from the plots. 
 
-
-```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
-###### Plot model forecasts and truth data for high hosp locs -------------------------------------- #
-hosp_pt_high <- read.csv("./data/point_frame_hosp_top.csv")
-
-hosp_pt_high <- hosp_pt_high %>%
-  select(-c(quantile, location, 11:16)) %>%
-  group_by(model, target_end_date, horizon_week, horizon) %>%
-  mutate(cum_hosp = sum(value)) %>%
-  distinct(cum_hosp, .keep_all = TRUE) %>%
-  #filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky", "Google_Harvard-CPF")) %>%
-  filter(horizon_week == 1) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
-
-hosp_pt_high$target_end_date <- parse_date_time(hosp_pt_high$target_end_date, orders = "ymd")
-hosp_pt_high$day_type <- as.factor(hosp_pt_high$day_type)
-
-# ggplot(hosp_pt_high) + 
-#   geom_point(aes(x = target_end_date, y = cum_hosp, color = model, shape = day_type, alpha = 0.5)) +
-#   geom_line(aes(x = target_end_date, y = cum_hosp, color = model)) +
-#   facet_wrap(vars(model))
-
-ggplot(filter(hosp_pt_high, model == "LANL-GrowthRate")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-#  geom_vline(aes(xintercept = as.Date("2021-05-22"), color = "red")) +
-  labs(title = "LANL-GrowthRate Forecasts") 
-
-
-ggplot(filter(hosp_pt_high, model == "COVIDhub-ensemble")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-02-13"), color = "red")) +
-  labs(title = "COVIDhub-ensemble Forecasts")
-
-ggplot(filter(hosp_pt_high, model == "GT-DeepCOVID")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  labs(title = "GT-DeepCOVID Forecasts")
-
-ggplot(filter(hosp_pt_high, model == "JHUAPL-Bucky")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
-  labs(title = "JHUAPL-Bucky Forecasts")
-
-ggplot(filter(hosp_pt_high, model == "Google_Harvard-CPF")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
-  labs(title = "Google_Harvard-CPF")
-
-ggplot(filter(hosp_pt_high, model == "Karlen-pypm")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
-  labs(title = "Karlen-pypm ")
-
-ggplot(filter(hosp_pt_high, model == "JHUAPL-SLPHospEns")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  #geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
-  labs(title = "JHUAPL-SLPHospEns")  
-
-# truth data
-
-hosp_truth_high2 <- hosp_truth_high %>% 
-  select(-c(location, 6:11)) %>%
-  group_by(target_end_date) %>%
-  mutate(cum_hosp = sum(value)) %>%
-  distinct(cum_hosp, .keep_all = TRUE) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
-
-ggplot(hosp_truth_high2) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  labs(title = "Truth Data")
-```
-
-Truth data has always shown day of the week effects (weekends always have lower inc hosp) but the models seemed to predict lower inc hosp on Tuesdays for the end of December/beginning of January, then most seem to switch to lower weekend end inc hosp sometime during 2021. 
-
-```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
-###### Plot model forecasts and truth data for low hosp locs ---------------------------------------- #
-hosp_pt_low <- read.csv("./data/point_frame_hosp_bottom.csv")
-
-hosp_pt_low <- hosp_pt_low %>%
-  select(-c(quantile, location, 11:16)) %>%
-  group_by(model, target_end_date, horizon_week) %>%
-  mutate(cum_hosp = sum(value)) %>%
-  distinct(cum_hosp, .keep_all = TRUE) %>%
-  #filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky")) %>%
-  filter(horizon_week == 1) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
-
-hosp_pt_low$target_end_date <- parse_date_time(hosp_pt_low$target_end_date, orders = "ymd")
-hosp_pt_low$day_type <- as.factor(hosp_pt_low$day_type)
-
-ggplot(filter(hosp_pt_high, model == "LANL-GrowthRate")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-#  geom_vline(aes(xintercept = as.Date("2021-05-22"), color = "red")) +
-  labs(title = "LANL-GrowthRate Forecasts") 
-
-
-ggplot(filter(hosp_pt_low, model == "COVIDhub-ensemble")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-02-13"), color = "red")) +
-  labs(title = "COVIDhub-ensemble Forecasts")
-
-ggplot(filter(hosp_pt_low, model == "GT-DeepCOVID")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  labs(title = "GT-DeepCOVID Forecasts")
-
-ggplot(filter(hosp_pt_low, model == "JHUAPL-Bucky")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
-  labs(title = "JHUAPL-Bucky Forecasts")
-
-ggplot(filter(hosp_pt_low, model == "Google_Harvard-CPF")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
-  labs(title = "Google_Harvard-CPF")
-
-ggplot(filter(hosp_pt_low, model == "Karlen-pypm")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
- # geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
-  labs(title = "Karlen-pypm ")
-
-ggplot(filter(hosp_pt_low, model == "JHUAPL-SLPHospEns")) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  #geom_vline(aes(xintercept = as.Date("2021-02-27"), color = "red")) +
-  labs(title = "JHUAPL-SLPHospEns")  
-
-# truth data
-
-hosp_truth_low2 <- hosp_truth_low %>% 
- # select(-c(location, 6:11)) %>%
-  group_by(target_end_date) %>%
-  mutate(cum_hosp = sum(value)) %>%
-  distinct(cum_hosp, .keep_all = TRUE) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
-
-ggplot(hosp_truth_low2) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  labs(title = "Truth Data")
-```
-
-The low hosp location truth data doesn't present such a clear pattern as to day of the week effects that suggest that weekends or weekdays generally have less inc hosp values. However, most of the models seem to switch to incorporating a day of the week effect at about the same time as that for the high count values. 
 
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
