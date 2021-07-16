@@ -29,6 +29,9 @@ library(igraph)
 library(gtools)
 library(gridExtra)
 library(ggdendro)
+library(anytime) # note that the Rcpp must be loaded to use the anytime package
+library(Rcpp)
+library(patchwork)
 knitr::opts_chunk$set(echo=FALSE,
                        comment = FALSE, message=FALSE, fig.show= 'hold',fig.pos="H",table.placement='H',
                        fig.align = 'center')
@@ -88,7 +91,7 @@ frame_format2 <- function(zoltr_frame){
 ```
 
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 source("./functions/distance_func_script.R")
 # set targets for analysis
 target_horizon <- 1:4
@@ -119,7 +122,8 @@ metadata$data_source <- ifelse(metadata$JHU_data,"JHU","unspecified")
 ## high count
 wide_frame_hosp_high <- read.csv("./data/quantile_frame_hosp_top.csv") %>%
   dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
-wide_frame_hosp_high$target_end_date <- parse_date_time(wide_frame_hosp_high$target_end_date, orders = "ymd")
+wide_frame_hosp_high$target_end_date <- anydate(wide_frame_hosp_high$target_end_date)
+
 
 h_frame_high <- wide_frame_hosp_high %>% 
   frame_format2()
@@ -137,7 +141,7 @@ hosp_truth_high <- load_truth("HealthData",
 ## low count
 wide_frame_hosp_low <- read.csv("./data/quantile_frame_hosp_bottom.csv") %>%
   dplyr::filter(!(model %in% c("CU-nochange","CU-scenario_high","CU-scenario_low","CU-scenario_mid")))
-wide_frame_hosp_low$target_end_date <- parse_date_time(wide_frame_hosp_low$target_end_date, orders = "ymd")
+wide_frame_hosp_low$target_end_date <- anydate(wide_frame_hosp_low$target_end_date)
 
 h_frame_low <- wide_frame_hosp_low %>% 
   frame_format2()
@@ -205,7 +209,7 @@ total_frame_high <- approx_cd_list_high[[1]] %>%
   dplyr::ungroup() %>%
   dplyr::select(-c("approx_cd","location")) %>%
   dplyr::distinct()
-total_frame_high$target_end_date <- as.Date(total_frame_high$target_end_date,origin="1970-01-01")
+total_frame_high$target_end_date <- as.Date(total_frame_high$target_end_date,origin="1980-01-01")
 
 h_frame_mean_high <- lapply(1:4, function(x) cd_matrix(approx_cd_list_high[[3]],x))
 
@@ -292,95 +296,144 @@ There are nine models that fulfilled the criteria for both the five locations wi
 
 We can plot point forecasts to see if any of the models incorporate day of the week effects (i.e. do forecasts certain days of the week specifically show lower/higher hospitalizations compared to other days). 
 
-```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
+```{r, out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
 plot_day_of_week_effect <- function(point_forecasts, model_name) {
   ggplot(filter(point_forecasts, model == model_name)) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  labs(title = paste(model_name, "Forecasts")) 
+  geom_point(aes(x = target_end_date, y = agg_hosp, shape = day_type)) +
+  geom_line(aes(x = target_end_date, y = agg_hosp)) +
+  labs(title = paste(model_name, "Forecasts"))
+}
+
+plot_day_of_week_effect_sep <- function(point_forecasts, model_name) {
+  ggplot(filter(point_forecasts, model == model_name), aes(group = day_type)) + 
+  geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) + 
+  geom_line(aes(x = target_end_date, y = agg_hosp, linetype = day_type)) +
+  labs(title = paste(model_name, "Forecasts"))  + 
+  scale_x_date(date_labels = "%m-%y") + 
+  theme(legend.position = "none")
 }
 
 ###### Plot model forecasts and truth data for high hosp locs -------------------------------------- #
+# truth data
+hosp_truth_high2 <- hosp_truth_high %>% 
+  select(-c(location, 6:11)) %>%
+  group_by(target_end_date) %>%
+  mutate(agg_hosp = sum(value)) %>%
+  distinct(agg_hosp, .keep_all = TRUE) %>%
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+
+# ggplot(hosp_truth_high2) + 
+#   geom_point(aes(x = target_end_date, y = agg_hosp, shape = day_type)) +
+#   geom_line(aes(x = target_end_date, y = agg_hosp)) +
+#   labs(title = "Truth Data")
+
+ggplot(hosp_truth_high2, aes(group = day_type)) + 
+  geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) +
+  geom_line(aes(x = target_end_date, y = agg_hosp, linetype = day_type)) +
+  labs(title = "Truth Data")
+
+# forecasts
 hosp_pt_high <- read.csv("./data/point_frame_hosp_top.csv")
+
+hosp_pt_high$forecast_date <- anydate(hosp_pt_high$forecast_date)
 
 hosp_pt_high <- hosp_pt_high %>%
   select(-c(quantile, location, 11:16)) %>%
   group_by(model, target_end_date, horizon_week, horizon) %>%
-  mutate(cum_hosp = sum(value)) %>%
-  distinct(cum_hosp, .keep_all = TRUE) %>%
+  mutate(agg_hosp = sum(value)) %>%
+  distinct(agg_hosp, .keep_all = TRUE) %>%
   filter(horizon_week == 1) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend")) %>%
+  mutate(forecast_day = weekdays(forecast_date))
 
-hosp_pt_high$target_end_date <- parse_date_time(hosp_pt_high$target_end_date, orders = "ymd")
+day_test <- hosp_pt_high %>%
+  group_by(model) %>%
+  distinct(forecast_day) %>%
+  filter(model %in% short_hmeta$model_abbr) 
+  # mobs was on sun instead of monday for forecasts made on 5/02 
+  # gecko was Sun on 1/24, 3/14, 4/04 - 6/06 ; Mon on 2/01 - 3/08, 3/22, 3/29
+  # google was Mon 1/25, 2/01, 2/15, 2/22, 3/08, 3/29 - 5/10, 5/24; 
+  #            Sun 2/07, 2/28, 3/14, 3/21, 5/16, 5/30, 6/06
+
+hosp_pt_high$target_end_date <- anydate(hosp_pt_high$target_end_date)
 hosp_pt_high$day_type <- as.factor(hosp_pt_high$day_type)
 
-ggplot(hosp_pt_high) +
-  geom_point(aes(x = target_end_date, y = cum_hosp, color = model, shape = day_type, alpha = 0.5)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp, color = model)) +
-  facet_wrap(vars(model))
+
+#plot_day_of_week_effect(hosp_pt_high, "Google_Harvard-CPF") # forecasts made on Mon
+
+plot_day_of_week_effect_sep(hosp_pt_high, "COVIDhub-ensemble") # as.Date("2021-02-13")
+plot_day_of_week_effect_sep(hosp_pt_high, "JHUAPL-Bucky") # as.Date("2021-02-27")
+plot_day_of_week_effect_sep(hosp_pt_high, "JHUAPL-Gecko")
+plot_day_of_week_effect_sep(hosp_pt_high, "Google_Harvard-CPF") 
+
+plot_day_of_week_effect_sep(hosp_pt_high, "Covid19Sim-Simulator")
+plot_day_of_week_effect_sep(hosp_pt_high, "CU-select")
+plot_day_of_week_effect_sep(hosp_pt_high, "Karlen-pypm") 
+plot_day_of_week_effect_sep(hosp_pt_high, "JHUAPL-SLPHospEns")
+plot_day_of_week_effect_sep(hosp_pt_high, "MOBS-GLEAM_COVID")
 
 
-plot_day_of_week_effect(hosp_pt_high, "COVIDhub-ensemble") # as.Date("2021-02-13"), mon
-plot_day_of_week_effect(hosp_pt_high, "JHUAPL-Bucky") # as.Date("2021-02-27"), Mon
-plot_day_of_week_effect(hosp_pt_high, "Google_Harvard-CPF") # forecasts made on Mon
-plot_day_of_week_effect(hosp_pt_high, "Karlen-pypm") # forecasts made on Sunday - likely no weekday effects
-plot_day_of_week_effect(hosp_pt_high, "JHUAPL-SLPHospEns") # forecasts made on Monday - likely no weekday effects
-
-# truth data
-
-hosp_truth_high2 <- hosp_truth_high %>% 
-  select(-c(location, 6:11)) %>%
-  group_by(target_end_date) %>%
-  mutate(cum_hosp = sum(value)) %>%
-  distinct(cum_hosp, .keep_all = TRUE) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
-
-ggplot(hosp_truth_high2) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
-  labs(title = "Truth Data")
 ```
 
 Truth data has always shown day of the week effects (weekends always have lower inc hosp) but the models seemed to predict lower inc hosp on Tuesdays for the end of December/beginning of January, then most seem to switch to lower weekend end inc hosp sometime during 2021. 
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
 ###### Plot model forecasts and truth data for low hosp locs ---------------------------------------- #
-hosp_pt_low <- read.csv("./data/point_frame_hosp_bottom.csv")
-
-hosp_pt_low <- hosp_pt_low %>%
-  select(-c(quantile, location, 11:16)) %>%
-  group_by(model, target_end_date, horizon_week) %>%
-  mutate(cum_hosp = sum(value)) %>%
-  distinct(cum_hosp, .keep_all = TRUE) %>%
-  #filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky")) %>%
-  filter(horizon_week == 1) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
-
-hosp_pt_low$target_end_date <- parse_date_time(hosp_pt_low$target_end_date, orders = "ymd")
-hosp_pt_low$day_type <- as.factor(hosp_pt_low$day_type)
-
-plot_day_of_week_effect(hosp_pt_low, "COVIDhub-ensemble") # as.Date("2021-02-13")
-plot_day_of_week_effect(hosp_pt_low, "JHUAPL-Bucky") # as.Date("2021-02-27")
-plot_day_of_week_effect(hosp_pt_low, "Google_Harvard-CPF") 
-plot_day_of_week_effect(hosp_pt_low, "Karlen-pypm") 
-plot_day_of_week_effect(hosp_pt_low, "JHUAPL-SLPHospEns") 
-
 # truth data
 
 hosp_truth_low2 <- hosp_truth_low %>% 
  # select(-c(location, 6:11)) %>%
   group_by(target_end_date) %>%
-  mutate(cum_hosp = sum(value)) %>%
-  distinct(cum_hosp, .keep_all = TRUE) %>%
+  mutate(agg_hosp = sum(value)) %>%
+  distinct(agg_hosp, .keep_all = TRUE) %>%
   mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
 
-ggplot(hosp_truth_low2) + 
-  geom_point(aes(x = target_end_date, y = cum_hosp, shape = day_type)) +
-  geom_line(aes(x = target_end_date, y = cum_hosp)) +
+ggplot(hosp_truth_low2, aes(group = day_type)) + 
+  geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) +
+  geom_line(aes(x = target_end_date, y = agg_hosp, linetype = day_type)) +
   labs(title = "Truth Data")
+
+# foreasts
+hosp_pt_low <- read.csv("./data/point_frame_hosp_bottom.csv")
+
+hosp_pt_low <- hosp_pt_low %>%
+  select(-c(quantile, location, 11:16)) %>%
+  group_by(model, target_end_date, horizon_week) %>%
+  mutate(agg_hosp = sum(value)) %>%
+  distinct(agg_hosp, .keep_all = TRUE) %>%
+  #filter(model %in% c("LANL-GrowthRate", "COVIDhub-ensemble", "GT-DeepCOVID", "JHUAPL-Bucky")) %>%
+  filter(horizon_week == 1) %>%
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+
+hosp_pt_low$target_end_date <- anydate(hosp_pt_low$target_end_date)
+hosp_pt_low$day_type <- as.factor(hosp_pt_low$day_type)
+
+plot_day_of_week_effect_sep(hosp_pt_low, "COVIDhub-ensemble") # as.Date("2021-02-13")
+plot_day_of_week_effect_sep(hosp_pt_low, "JHUAPL-Bucky") # as.Date("2021-02-27")
+plot_day_of_week_effect_sep(hosp_pt_low, "JHUAPL-Gecko")
+plot_day_of_week_effect_sep(hosp_pt_low, "Google_Harvard-CPF") 
+
+plot_day_of_week_effect_sep(hosp_pt_low, "Covid19Sim-Simulator")
+plot_day_of_week_effect_sep(hosp_pt_low, "CU-select")
+plot_day_of_week_effect_sep(hosp_pt_low, "Karlen-pypm") 
+plot_day_of_week_effect_sep(hosp_pt_low, "JHUAPL-SLPHospEns")
+plot_day_of_week_effect_sep(hosp_pt_low, "MOBS-GLEAM_COVID")
 ```
 
 The low hosp location truth data doesn't present such a clear pattern as to day of the week effects that suggest that weekends or weekdays generally have less inc hosp values. However, most of the models seem to switch to incorporating a day of the week effect at about the same time as that for the high count values. 
+
+```{r}
+recent_hmeta$day_of_wk_effect <- 
+  as.factor(c("FALSE", "ENS incl", "FALSE", "UNCLEAR", "TRUE", "TRUE", "ENS excl", "FALSE", "FALSE"))
+
+short_hday <- select(recent_hmeta, c(model_abbr, day_of_wk_effect))
+
+knitr::kable(short_hday, col.names = c("Model","Day of Week Effect"))
+
+metadata <- metadata %>%
+  left_join(select(recent_hmeta, c(model_name, day_of_wk_effect)), by = c("model_name"))
+```
+
 
 ### Model types
 
@@ -391,16 +444,73 @@ The low hosp location truth data doesn't present such a clear pattern as to day 
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
+```{r}
+distance_heatmap_wk <- function(sum_dist,name,metadata=NULL){
+  tmp <- sum_dist %>%
+    dplyr::group_by(model_1,model_2) %>%
+    dplyr::mutate(ov_mean=mean(mean_dis)) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(-"mean_dis") %>%
+    dplyr::distinct(.,.keep_all = TRUE) %>%
+    dplyr::arrange(desc(ov_mean))
+  order_list <- unique(tmp$model_1)
+  if (is.null(metadata)) {
+    ggplot(sum_dist, aes(factor(model_1,levels=order_list),
+                         factor(model_2,levels=order_list))) +
+      geom_tile(aes(fill= mean_dis)) +
+      facet_wrap(~horizon) +
+      theme(axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+            axis.text.y=element_text(size=rel(0.7)))+
+      labs(title=name)+
+      xlab("") +
+      ylab("") +
+      scale_fill_distiller(palette = "YlOrRd",direction=+1,name="distance") +
+      theme(plot.title = element_text(size=8),
+            legend.title = element_text(size=5),
+            legend.key.size = unit(0.3, 'cm'),
+            legend.text = element_text(size=4),
+            plot.margin=unit(c(0,0,0,0),"cm"))
+    
+  } else {
+    set1<-c("red","blue","pink","purple")
+    color_set <- ifelse(metadata$day_of_wk_effect == "FALSE", 
+                        set1[1], 
+                        ifelse(metadata$day_of_wk_effect ==  "TRUE",
+                               set1[2],
+                               ifelse(metadata$day_of_wk_effect == "ENS incl",
+                                      set1[3], set1[4])))
+    type_color <-  color_set[order(match(metadata$model_abbr,order_list))]
+    ggplot(sum_dist, aes(factor(model_1,levels=order_list),
+                         factor(model_2,levels=order_list))) +
+      geom_tile(aes(fill= mean_dis)) +
+      facet_wrap(~horizon) +
+      theme(axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1, colour = type_color),
+            axis.text.y=element_text(size=rel(0.7), colour = type_color))+
+      labs(title=name)+
+      xlab("") +
+      ylab("") +
+      scale_fill_distiller(palette = "YlOrRd",direction=+1,name="distance") +
+      theme(plot.title = element_text(size=8),
+            legend.title = element_text(size=5),
+            legend.key.size = unit(0.3, 'cm'),
+            legend.text = element_text(size=4),
+            plot.margin=unit(c(0,0,0,0),"cm"))
+  }
+} #fix to incl. UNCLEAR level
+```
+
+
 ```{r,out.width="95%", fig.align='center', warning=FALSE}
-distance_heatmap(approx_cd_list_high[[3]],
-                 "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Hospitalization Count Locations",
-                 recent_hmeta)
-distance_heatmap(approx_cd_list_low[[3]],
-                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - Low Hospitalization Count Locations",
-                recent_hmeta)
+distance_heatmap_wk(approx_cd_list_high[[3]],
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Hospitalization Count Locations", recent_hmeta)  
+
+distance_heatmap_wk(approx_cd_list_low[[3]],
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - Low Hospitalization Count Locations", recent_hmeta)
 ```
 
 Google_Harvard-CPF is generally the least similar to the other models for both the high count and low count locations. This is true across all horizons for the high count locations, but only true for one and two week horizons of the low count locations. Covid19Sim-Simulator and JHUAPL-Bucky show similar Cramer's Distances at three and four week horizons at the low count locations. Covid19Sim-Simulator is the second least similar model for the high count locations, but its Cramer's Distance is much smaller than that of Google_Harvard-CPF. Of note is similar differences between models at all horizons for high count locations, unlike the results shown for inc cases and inc deaths which show substantial differences between models as horizon length increases. 
+
+For low count locations, models with day of the week effect tend to have higher Cramer's Distances, but there doesn't seem to be much of a pattern for high count locations. 
 
 
 We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
@@ -437,9 +547,9 @@ date_range <- seq.Date(from = as.Date("2021-01-28"), to = as.Date("2021-06-10"),
 hosp_truth_high <- load_truth("HealthData", 
                          "inc hosp", 
                          temporal_resolution="weekly",
-                         data_location = "remote_hub_repo") %>%
-  dplyr::filter(target_end_date >= min(unique(ot_data_high$target_end_date)),
-                target_end_date <= max(unique(ot_data_high$target_end_date)),
+                         data_location = "remote_hub_repo") %>% 
+  dplyr::filter(target_end_date >= min(unique(h_frame_high$target_end_date)),
+                target_end_date <= max(unique(h_frame_high$target_end_date)),
                 geo_type=="state",
                 location_name %in% unique(wide_frame_hosp_high$location_name)) 
 
@@ -449,8 +559,8 @@ hosp_truth_low <- load_truth("HealthData",
                          "inc hosp", 
                          temporal_resolution="weekly",
                          data_location = "remote_hub_repo") %>%
-  dplyr::filter(target_end_date >= min(unique(ot_data_high$target_end_date)),
-                target_end_date <= max(unique(ot_data_high$target_end_date)),
+  dplyr::filter(target_end_date >= min(unique(h_frame_high$target_end_date)),
+                target_end_date <= max(unique(h_frame_high$target_end_date)),
                 geo_type=="state",
                 location_name %in% unique(wide_frame_hosp_low$location_name)) 
 
@@ -494,6 +604,8 @@ cd_diff_high <- total_frame_high %>%
                 model_2 == "Covid19Sim-Simulator") %>%
   dplyr:: ungroup() 
 
+cd_diff_high$target_end_date <- anydate(cd_diff_high$target_end_date)
+
 ggplot(cd_diff_high, aes(x=target_end_date, y=mean_approx_cd)) + 
    #   geom_point(alpha=0.6,size=0.8) + 
       geom_line(alpha=0.4) +
@@ -514,6 +626,8 @@ cd_diff_low <- total_frame_low %>%
   dplyr::filter(model_1 =="Google_Harvard-CPF",
                 model_2 == "Covid19Sim-Simulator") %>%
   dplyr:: ungroup() 
+
+cd_diff_low$target_end_date <- anydate(cd_diff_low$target_end_date)
 
 ggplot(cd_diff_low, aes(x=target_end_date, y=mean_approx_cd)) + 
    #   geom_point(alpha=0.6,size=0.8) + 
@@ -548,7 +662,8 @@ hosp_pt_ca_ny <- hosp_pt_ca_ny %>%
     horizon %in% 21:28 ~ 4,
   )) %>%
   filter(location %in% c("6", "36")) %>%
-  filter(target_end_date >= as.Date("2021-01-07"), target_end_date <= as.Date("2021-06-10"))  %>%
+  filter(target_end_date >= min(unique(h_frame_high$target_end_date)), 
+         target_end_date <= max(unique(h_frame_high$target_end_date)))  %>%
   filter(model %in% c("JHUAPL-SLPHospEns", "COVIDhub-ensemble")) %>%
   filter(horizon_week == 1) %>%
   select(-c(horizon_week, horizon)) %>%
@@ -556,6 +671,7 @@ hosp_pt_ca_ny <- hosp_pt_ca_ny %>%
 
 
 hosp_truth_forecast_ca_ny <- rbind(hosp_truth_ca_ny, hosp_pt_ca_ny)
+hosp_truth_forecast_ca_ny$target_end_date <- anydate(hosp_truth_forecast_ca_ny$target_end_date)
 
 # plot truth data
 ggplot(hosp_truth_forecast_ca_ny, 
@@ -573,92 +689,122 @@ ggplot(hosp_truth_forecast_ca_ny,
                    date_labels = "%m-%y")
 ```
 
-```{r don't run}
-truth_high <- load_truth("HealthData", 
-                         "inc hosp", 
-                         temporal_resolution="weekly",
-                         data_location = "remote_hub_repo") %>%
-   dplyr::filter(geo_type=="state",
-                 location_name %in% unique(wide_frame_hosp_high$location_name)) %>%
-  select(c(target_end_date, location_name, value)) %>% # could remove target_end_date
-  mutate(align_date = target_end_date %m+% weeks(1))
-
-
-test <- wide_frame_hosp_high %>%
- # group_by(target_end_date, location_name) %>%
-  left_join(truth_high, by = c("target_end_date" = "align_date", "location_name")) %>% 
-  filter(target_end_date >= as.Date("2021-01-07"), target_end_date <= as.Date("2021-06-10")) %>%
-  rename(prior_truth = `value.y`) %>%
-  mutate(scaled_value = value.x/prior_truth)
-
-ggplot(filter(test, model %in% c("COVIDhub-ensemble", "JHUAPL-SLPHospEns")), 
-       aes(x = target_end_date, y = scaled_value, color = model, shape = location_name)) + 
-      geom_point(alpha=0.6) + 
-      geom_line() +
-      ggtitle("Hosp Truth and Forecasts Over Time") +
-      ylab("Inc Hosp") +
-      xlab("Forecast End Date") +
-      theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=9),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))
-
-###########
-
-
-
-#Prepare
-Bad_Data$Lower_Bound <- Lower_Bound$C
-Bad_Data$Upper_Bound <- Upper_Bound$C
-
-#Plot
-library(ggplot2)
-p <- ggplot(Bad_Data, aes(x = Q, y = C, color=Name, group=Name))
-p <- p + geom_line()
-p + geom_ribbon(aes(ymin=Lower_Bound, ymax=Upper_Bound), 
-                alpha=0.1,       #transparency
-                linetype=1,      #solid, dashed or other line types
-                colour="grey70", #border line color
-                size=1,          #border line size
-                fill="green")    #fill color
-
-#############
-quantiles <- unique(test$quantile)
-graph <- ggplot2::ggplot(data = test, ggplot2::aes(x= target_end_date))
- graph  +
-      ggplot2::geom_ribbon(data = test,
-                mapping = ggplot2::aes(ymin=min(quantiles), 
-                                       ymax=max(quantiles),
-                                       group = interaction(`Prediction Interval`, model, 
-                                                           location, forecast_date),
-                                       fill = interaction(`Prediction Interval`, model)),
-                alpha = 1.0, show.legend=FALSE) +
-      ggplot2::scale_fill_manual(name = "Prediction Interval"
-                                 #, values = interval_colors
-                                 ) +
-      # create a transparent layer with grey colors to get prediction interval legend
-      ggnewscale::new_scale_fill() +
-      ggplot2::geom_ribbon(data = test %>%
-                             dplyr::filter(type == "quantile"),
-                           mapping = ggplot2::aes(ymin=min(quantiles), 
-                                                  ymax=max(quantiles), 
-                                                  fill = `Prediction Interval`), 
-                           alpha = 0) +
-#      ggplot2::scale_fill_manual(name = "Prediction Interval", values = ribbon_colors) +
-      # create a transparent layer for models legend when point forecasts are not plotted
-      # models legend will be covered if point forecasts are plotted
-      ggplot2::geom_line(data = test %>%
-                           dplyr::filter(type == "quantile"),
-                         mapping = ggplot2::aes(y = max(quantiles), colour = model), alpha = 0) +
-#      ggplot2::scale_color_manual(name = "Model", values = forecast_colors) +
-      # reset alpha in legend fill
-      ggplot2::guides(
-        fill = ggplot2::guide_legend(override.aes = list(alpha = 1)))
+```{r}
+# truth_high <- load_truth("HealthData", 
+#                          "inc hosp", 
+#                          temporal_resolution="weekly",
+#                          data_location = "remote_hub_repo") %>%
+#    dplyr::filter(geo_type=="state",
+#                  location_name %in% unique(wide_frame_hosp_high$location_name)) %>%
+#   select(c(target_end_date, location_name, value)) %>% # could remove target_end_date
+#   mutate(align_date = target_end_date %m+% weeks(1))
+# 
+# 
+# test <- wide_frame_hosp_high %>%
+#  # group_by(target_end_date, location_name) %>%
+#   left_join(truth_high, by = c("target_end_date" = "align_date", "location_name")) %>% 
+#   filter(target_end_date >= min(unique(h_frame_high$target_end_date)), 
+#          target_end_date <= unique(h_frame_high$target_end_date)) %>%
+#   rename(prior_truth = `value.y`) %>%
+#   mutate(scaled_value = value.x/prior_truth)
+# 
+# ggplot(filter(test, model %in% c("COVIDhub-ensemble", "JHUAPL-SLPHospEns")), 
+#        aes(x = target_end_date, y = scaled_value, color = model, shape = location_name)) + 
+#       geom_point(alpha=0.6) + 
+#       geom_line() +
+#       ggtitle("Hosp Truth and Forecasts Over Time") +
+#       ylab("Inc Hosp") +
+#       xlab("Forecast End Date") +
+#       theme(legend.text = element_text(size=5),
+#             legend.title = element_text(size=9),
+#             axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
+#             legend.key.size = unit(0.5, 'cm'))
+# 
+# ###########
+# 
+# 
+# 
+# #Prepare
+# Bad_Data$Lower_Bound <- Lower_Bound$C
+# Bad_Data$Upper_Bound <- Upper_Bound$C
+# 
+# #Plot
+# library(ggplot2)
+# p <- ggplot(Bad_Data, aes(x = Q, y = C, color=Name, group=Name))
+# p <- p + geom_line()
+# p + geom_ribbon(aes(ymin=Lower_Bound, ymax=Upper_Bound), 
+#                 alpha=0.1,       #transparency
+#                 linetype=1,      #solid, dashed or other line types
+#                 colour="grey70", #border line color
+#                 size=1,          #border line size
+#                 fill="green")    #fill color
+# 
+# #############
+# quantiles <- unique(test$quantile)
+# graph <- ggplot2::ggplot(data = test, ggplot2::aes(x= target_end_date))
+#  graph  +
+#       ggplot2::geom_ribbon(data = test,
+#                 mapping = ggplot2::aes(ymin=min(quantiles), 
+#                                        ymax=max(quantiles),
+#                                        group = interaction(`Prediction Interval`, model, 
+#                                                            location, forecast_date),
+#                                        fill = interaction(`Prediction Interval`, model)),
+#                 alpha = 1.0, show.legend=FALSE) +
+#       ggplot2::scale_fill_manual(name = "Prediction Interval"
+#                                  #, values = interval_colors
+#                                  ) +
+#       # create a transparent layer with grey colors to get prediction interval legend
+#       ggnewscale::new_scale_fill() +
+#       ggplot2::geom_ribbon(data = test %>%
+#                              dplyr::filter(type == "quantile"),
+#                            mapping = ggplot2::aes(ymin=min(quantiles), 
+#                                                   ymax=max(quantiles), 
+#                                                   fill = `Prediction Interval`), 
+#                            alpha = 0) +
+# #      ggplot2::scale_fill_manual(name = "Prediction Interval", values = ribbon_colors) +
+#       # create a transparent layer for models legend when point forecasts are not plotted
+#       # models legend will be covered if point forecasts are plotted
+#       ggplot2::geom_line(data = test %>%
+#                            dplyr::filter(type == "quantile"),
+#                          mapping = ggplot2::aes(y = max(quantiles), colour = model), alpha = 0) +
+# #      ggplot2::scale_color_manual(name = "Model", values = forecast_colors) +
+#       # reset alpha in legend fill
+#       ggplot2::guides(
+#         fill = ggplot2::guide_legend(override.aes = list(alpha = 1)))
 ```
 
 
 
 We can also cluster the distances using hierarchical clustering. 
+
+```{r}
+dendro_plot_wk <- function(horizon, frame_name,metadata){
+  hclust_dat <- hclust(as.dist(get(frame_name)[[horizon]]), 
+                       method = "ward.D", members = NULL)
+  ddata <- label(dendro_data(as.dendrogram(hclust_dat))) %>%
+    left_join(metadata,by=c("label"="model_abbr"))
+  set1<-c("red","blue","pink","purple")
+    color_set <- ifelse(metadata$day_of_wk_effect == "FALSE", 
+                        set1[1], 
+                        ifelse(metadata$day_of_wk_effect ==  "TRUE",
+                               set1[2],
+                               ifelse(metadata$day_of_wk_effect == "ENS incl",
+                                      set1[3], set1[4])))
+  dendro_p <- ggdendrogram(
+           hclust(as.dist(get(frame_name)[[horizon]]), method = "ward.D",members = NULL)
+           ,size = 2, rotate=TRUE) +
+           labs(title=paste0("Dendrogram - ",i, " wk ahead inc hosp"))+
+           xlab("") +
+           ylab("Mean Cramer's Distance") +
+           theme(axis.text.x = element_text(size=5),
+                 axis.text.y = element_text(size=7,colour=color_set),
+                 plot.margin=unit(c(0,0,0,0),"cm"),
+                 plot.title = element_text(size=7)
+           )
+} 
+
+```
+
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
 for(i in 1:4){
@@ -675,7 +821,21 @@ for(i in 1:4){
            dendro_plot(i, "h_frame_mean_low",short_hdata,FALSE)
              )
   } 
-grid.arrange(dp_1,dp_2,dp_3,dp_4,nrow=2)
+# for(i in 1:4){
+#     assign(paste0("dp_",i),
+#            dendro_plot_wk(i, "h_frame_mean_high",short_hmeta)
+#              )
+#     assign(paste0("dpd_",i),
+#            dendro_plot_wk(i, "h_frame_mean_high",short_hmeta)
+#              )
+#     assign(paste0("dpl_",i),
+#            dendro_plot_wk(i, "h_frame_mean_low",short_hmeta)
+#              )
+#     assign(paste0("dpdl_",i),
+#            dendro_plot_wk(i, "h_frame_mean_low",short_hmeta)
+#              )
+#   } 
+grid.arrange(dp_1,dp_2,dp_3,dp_4)
 ```
 
 
