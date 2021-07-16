@@ -435,13 +435,6 @@ metadata <- metadata %>%
 ```
 
 
-### Model types
-
-```{r}
-#knitr::kable(short_hmeta, col.names = c("Model","Type"))
-```
-
-
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
 ```{r}
@@ -472,13 +465,16 @@ distance_heatmap_wk <- function(sum_dist,name,metadata=NULL){
             plot.margin=unit(c(0,0,0,0),"cm"))
     
   } else {
-    set1<-c("red","blue","pink","purple")
+    set1<-c("red","blue","pink","light blue", "purple")
     color_set <- ifelse(metadata$day_of_wk_effect == "FALSE", 
                         set1[1], 
                         ifelse(metadata$day_of_wk_effect ==  "TRUE",
                                set1[2],
                                ifelse(metadata$day_of_wk_effect == "ENS incl",
-                                      set1[3], set1[4])))
+                                      set1[3], 
+                                      ifelse(metadata$day_of_wk_effect == "ENS excl",
+                                      set1[4],
+                                      set1[5]))))
     type_color <-  color_set[order(match(metadata$model_abbr,order_list))]
     ggplot(sum_dist, aes(factor(model_1,levels=order_list),
                          factor(model_2,levels=order_list))) +
@@ -783,13 +779,17 @@ dendro_plot_wk <- function(horizon, frame_name,metadata){
                        method = "ward.D", members = NULL)
   ddata <- label(dendro_data(as.dendrogram(hclust_dat))) %>%
     left_join(metadata,by=c("label"="model_abbr"))
-  set1<-c("red","blue","pink","purple")
-    color_set <- ifelse(metadata$day_of_wk_effect == "FALSE", 
+    set1<-c("red","blue","pink","light blue", "purple")
+    color_set <- ifelse(ddata$day_of_wk_effect == "FALSE", 
                         set1[1], 
-                        ifelse(metadata$day_of_wk_effect ==  "TRUE",
+                        ifelse(ddata$day_of_wk_effect ==  "TRUE",
                                set1[2],
-                               ifelse(metadata$day_of_wk_effect == "ENS incl",
-                                      set1[3], set1[4])))
+                               ifelse(ddata$day_of_wk_effect == "ENS incl",
+                                      set1[3], 
+                                      ifelse(ddata$day_of_wk_effect == "ENS excl",
+                                      set1[4],
+                                      set1[5]))))
+   # type_color <-  color_set[order(match(ddata$model_abbr,order_list))]
   dendro_p <- ggdendrogram(
            hclust(as.dist(get(frame_name)[[horizon]]), method = "ward.D",members = NULL)
            ,size = 2, rotate=TRUE) +
@@ -797,7 +797,7 @@ dendro_plot_wk <- function(horizon, frame_name,metadata){
            xlab("") +
            ylab("Mean Cramer's Distance") +
            theme(axis.text.x = element_text(size=5),
-                 axis.text.y = element_text(size=7,colour=color_set),
+                 axis.text.y = element_text(size=7, colour=color_set),
                  plot.margin=unit(c(0,0,0,0),"cm"),
                  plot.title = element_text(size=7)
            )
@@ -806,41 +806,21 @@ dendro_plot_wk <- function(horizon, frame_name,metadata){
 ```
 
 
-```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
+```{r,out.width="95%", fig.cap="High Hospitalization Count Locations", fig.align='center', message=FALSE, warning=FALSE}
 for(i in 1:4){
     assign(paste0("dp_",i),
-           dendro_plot(i, "h_frame_mean_high",short_hmeta)
-             )
-    assign(paste0("dpd_",i),
-           dendro_plot(i, "h_frame_mean_high",short_hdata,FALSE)
+           dendro_plot_wk(i, "h_frame_mean_high",short_hday)
              )
     assign(paste0("dpl_",i),
-           dendro_plot(i, "h_frame_mean_low",short_hmeta)
+           dendro_plot_wk(i, "h_frame_mean_low",short_hday)
              )
-    assign(paste0("dpdl_",i),
-           dendro_plot(i, "h_frame_mean_low",short_hdata,FALSE)
-             )
-  } 
-# for(i in 1:4){
-#     assign(paste0("dp_",i),
-#            dendro_plot_wk(i, "h_frame_mean_high",short_hmeta)
-#              )
-#     assign(paste0("dpd_",i),
-#            dendro_plot_wk(i, "h_frame_mean_high",short_hmeta)
-#              )
-#     assign(paste0("dpl_",i),
-#            dendro_plot_wk(i, "h_frame_mean_low",short_hmeta)
-#              )
-#     assign(paste0("dpdl_",i),
-#            dendro_plot_wk(i, "h_frame_mean_low",short_hmeta)
-#              )
-#   } 
+}
+
 grid.arrange(dp_1,dp_2,dp_3,dp_4)
 ```
 
 
-
-```{r,fig.align='center',fig.cap="Low Mortality Count Locations",fig.height=4}
+```{r,out.width="95%", fig.align='center',fig.cap="Low Hospitalization Count Locations",fig.height=4}
 grid.arrange(dpl_1,dpl_2,dpl_3,dpl_4,nrow=2)
 ```
 
@@ -848,5 +828,5 @@ For both high count and low count locations, all of the dendrograms show that Go
 
    
 
-Overall, it seems that Google_Harvard-CPF is consistently the most dissimilar from the other models by a substantial amount, followed by Covid19Sim-Simulator, across almost all horizons for both high-count and low count regions. 
+Overall, it seems that Google_Harvard-CPF is consistently the most dissimilar from the other models by a substantial amount, followed by Covid19Sim-Simulator, across almost all horizons for both high-count and low count regions. It does not seem that models with day of the week effects are more dissimilar from the COVIDhub-ensemble model than models without day of the week effects. 
 
