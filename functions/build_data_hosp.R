@@ -5,7 +5,7 @@ library(covidHubUtils)
 
 # script to build a dataframe of model 
 # first sat end date for 1 wk ahead
-first_end_date <- as.Date("2020-12-17") # change this to January some time after new year
+first_end_date <- as.Date("2021-01-28") # change this to January some time after new year
 
 most_recent_end_date <- as.Date("2021-06-10") # pick a date
   
@@ -22,8 +22,8 @@ hosp_truth <- load_truth("HealthData", #note this is the only source available
                          "inc hosp", 
                          temporal_resolution="weekly",
                          data_location = "remote_hub_repo") %>%
-  dplyr::filter(target_end_date >= "2020-12-17",
-                target_end_date <= "2021-06-10",
+  dplyr::filter(target_end_date >= first_end_date,
+                target_end_date <= most_recent_end_date,
                 geo_type=="state",
                 location != "US") %>%
   dplyr::group_by(location) %>%
