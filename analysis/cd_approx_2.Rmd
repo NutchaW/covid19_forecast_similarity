@@ -1,7 +1,7 @@
 ---
 title: "Forecast Similarity Using Cramer Distance Approximation"
 author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit"
-date: "06/24/2021"
+date: "07/15/2021"
 header-includes:
    - \usepackage{amsmath}
    - \usepackage{tabularx}
@@ -30,14 +30,19 @@ knitr::opts_chunk$set(echo = FALSE)
 library(ExtDist)
 ```
 
-## Cramer Distance
+# Cramer Distance
 
 Consider two predictive distributions $F$ and $G$. Their *Cramer distance* or *integrated quadratic distance*  is defined as
 
 $$
 \text{CD}(F, G) = \int_{-\infty}^\infty(F(x) - G(x))^2 dx
 $$
-where $F(x)$ and $G(x)$ denote the cumulative distribution functions. The Cramer distance is the divergence associated with the continuous ranked probability score (Thorarinsdottir 2013, Gneiting and Raftery 2007).
+where $F(x)$ and $G(x)$ denote the cumulative distribution functions. The Cramer distance is the divergence associated with the continuous ranked probability score (Thorarinsdottir 2013, Gneiting and Raftery 2007), which is defined by
+
+\begin{equation}
+\text{CRPS}(F, y) = \int_{-\infty}^\infty(F(x) - \mathbf{1}(x \geq y))^2 dx = ) = 2\int_0^1((\mathbf{1}(y \leq q^F_k)-\tau_k)(q^F_k-y) d\tau_k \label{eq:crps}
+\end{equation}
+
 
 \begin{equation}
 \text{CD}(F, G) = \mathbb{E}_{F, G}|x - y| - 0.5 \left[\mathbb{E}_F|x - x'| + \mathbb{E}_G|y - y'| \right], \label{eq:formulation_expectations}
@@ -48,7 +53,7 @@ where $x, x'$ are independent random variables following $F$ and $y, y'$ are ind
 
 Now assume that for each of the distributions $F$ and $G$ we only know $K$ quantiles at equally spaced levels $1/(K + 1), 2/(K + 1), \dots, K/(K + 1)$. Denote these quantiles by $q^F_1, \dots, q^F_K$ and $q^G_1, \dots, q^G_K$, respectively. It is well known that the CRPS can be approximated by an average of linear quantile scores (Laio and Tamea 2007, Gneiting and Raftery 2007):
 \begin{equation}
-\text{CRPS}(F, y) \approx \frac{1}{K} \times \sum_{k = 1}^K 2\{\mathbf{1}(y \leq q^F_k)\} \times (q^F_k - y).\label{eq:linear_quantile_scores}
+\text{CRPS}(F, y) \approx \frac{1}{K} \times \sum_{k = 1}^K 2\{\mathbf{1}(y \leq q^F_k)-\tau_k\} \times (q^F_k - y).\label{eq:linear_quantile_scores}
 \end{equation}
 This approximation is equivalent to the weighted interval score (WIS) which is in use for evaluation of quantile forecasts at the Forecast Hub, see Section 2.2 of Bracher et al (2021). This approximation can be generalized to the Cramer distance as
 \begin{equation}
@@ -68,7 +73,13 @@ actually works better. This just corresponds to the integrated squared differenc
 
 ## Cramer Distance Approximation for Unequally-Spaced Intervals 
 
-Suppose we have quantiles $q_{1}^F,...,q_{K}^F$ and $q_{1}^G,...,q_{K}^G$ at $K$ probability levels $\tau_1,...,\tau_K$ from two distributions $F$ and $G$. Define the combined vector of quantiles $q_1, . . . , q_{2K}$ by combining the vectors $q_{1}^F,...,q_{K}^F$ and $q_{1}^G,...,q_{K}^G$ and sorting them in an ascending order. Essentially, we can approximate the Cramer distance by eliminating the tails of the integral to the left of $q_1$ and the right of $q_{2K}$, and approximating the center via a Riemann sum:
+Suppose we have quantiles $q_{1}^F,...,q_{K}^F$ and $q_{1}^G,...,q_{K}^G$ at $K$ probability levels $\tau_1,...,\tau_K$ from two distributions $F$ and $G$. Define the combined vector of quantiles $q_1, . . . , q_{2K}$ by combining the vectors $q_{1}^F,...,q_{K}^F$ and $q_{1}^G,...,q_{K}^G$ and sorting them in an ascending order. The CRPS can be approximated as follows
+\begin{equation}
+\text{CRPS}(F, y) \approx 2\sum_{k = 1}^K \{\mathbf{1}(y \leq q^F_k)-\tau_k\} \times (q^F_k - y) \times (\tau_k-\tau_{k-1}).\label{eq:ls_unqe}
+\end{equation}
+with $\tau_0=0$. We can see that with equally spaced interval of $1/K$ increment, this equation generalizes to \eqref{linear_quantile_scores}. 
+
+Essentially, we can approximate the Cramer distance by eliminating the tails of the integral to the left of $q_1$ and the right of $q_{2K}$, and approximating the center via a Riemann sum:
 
 
 \begin{align}
@@ -183,7 +194,6 @@ where $\tau_{q_j}^G$ is the probability level corresponding to $q_j$ given $q_j$
 
 ### Trapezoidal rule
 
-
 \begin{align}
 \text{CD}(F,G) &\approx\sum^{2K-1}_{j=1}\int^{q_{j+1}}_{q_j}{F(x)−G(x)}^2\\
 &\approx\sum^{N+M-1}_{j=1}\frac{\{\hat{F}(q_j)-\hat{G}(q_j)\}^2+\{\hat{F}(q_{j+1})-\hat{G}(q_{j+1})\}^2}{2}(q_{j+1}-q_{j}),\\
@@ -198,8 +208,80 @@ which we can rewrite as follows
 \sum^{N+M-1}_{j=1}\frac{\{\tau^F_j-\tau^G_j\}^2+\{\tau^F_{j+1}-\tau^G_{j+1}\}^2}{2}(q_{j+1}-q_{j}).
 \end{align}
 
-<!-- ## Relationship Between the CD Approximations for Equally-Spaced Intervals and Unequally-Spaced Intervals -->
+## Decomposition of Approximated Cramer Distance 
 
+The Cramer distance is commonly used to measure the similarity of forecast distributions (see Richardson et al 2020 for a recent application). Now assume that for each of the distributions $F$ and $G$ we only know $K$ quantiles at equally spaced levels $1/(K + 1), 2/(K + 1), \dots, K/(K + 1)$. Denote these quantiles by $q^F_1, \dots, q^F_K$ and $q^G_1, \dots, q^G_K$, respectively. This CRPS approximation given by \eqref{linear_quantile_scores} is equivalent to the weighted interval score (WIS) which is in use for evaluation of quantile forecasts at the Forecast Hub, see Section 2.2 of Bracher et al (2021). This approximation can be generalized to the Cramer distance as
+\begin{equation}
+\text{CD}(F, G) \approx \frac{1}{K(K + 1)}\sum_{i = 1}^K\sum_{j = 1}^K \mathbf{1}\{(i - j) \times (q^F_i - q^G_j) \leq 0\} \times \left| q^F_i - q^G_j\right|,\label{eq:approx_cd}
+\end{equation}
+This can be seen as a sum of penalties for \textit{incompatibility} of predictive quantiles. Whenever the predictive quantiles $q_i^F$ and $q_j^G$ are incompatible in the sense that they imply $F$ and $G$ are different distributions (e.g. because $q_F^i > q_G^j$ despite $i < j$ or $q_F^i \neq q_G^j$ despite $i = j$), a penalty $\left| q^F_i - q^G_j\right|$ is added to the sum. This corresponds to the shift which would be necessary to make $q_F^i$ and $q_G^j$ compatible.
+
+## A divergence measure for central prediction intervals with potentially different nominal coverages
+
+Consider two central prediction intervals $[l^F, u^F]$ and $[l^G, u^G]$ with nominal levels $\alpha^F$ and $\alpha^G$, respectively (meaning that $l^F$ is the $(1 - \alpha^F)/2$ quantile of $F$ etc). We can define an \textit{interval divergence} measure by comparing the two pairs of predictive quantiles and summing up the respective incompatibility penalties as in \eqref{eq:approx_cd}. Adapting notation to the interval formulation and structuring the sum slightly differently, this can be written as:
+
+\begin{align*}
+\text{ID}([l^F, u^F], [l^G, u^G], \alpha^F, \alpha^G) = & \ \mathbf{1}(\alpha^F \leq \alpha^G)\times\left\{\max(l^G - l^F, 0) + \max(u^F - u^G, 0)\right\} \ +\\
+& \ \mathbf{1}(\alpha^F \geq \alpha^G) \times \left\{\max(l^F - l^G, 0) + \max(u^G - u^F, 0)\right\} \ +\\
+& \max(l^F - u^G, 0) \ +\\
+& \max(l^G - u^F, 0)
+\end{align*}
+
+The first row adds penalties for the case where $[l^F, u^F]$ should be nested in $[l^G, u^G]$, but at least one of its ends is more extreme than the respective end of $[l^G, u^G]$. The second row covers the converse case. The last two rows add penalties if the lower end of one interval exceeds the upper end of the other, i.e. the intervals do not overlap.
+
+This can be seen as a (scaled version of a) generalization of the interval score, but writing out the exact relationship is a bit tedious.
+
+We now define four auxiliary terms with an intuitive interpretation which add up to the interval divergence:
+
+\begin{itemize}
+\item The term
+$$
+D_F = \mathbf{1}(\alpha^F \leq \alpha^G)\times\max\{(u^F - l^F) - (u^G - l^G), 0\}
+$$
+is the sum of penalties resulting from $F$ being more dispersed than $G$. It is positive whenever the interval $[l^F, u^F]$ is longer than $[l^G, u^G]$, even though it should be nested in the latter. $D_F$ then tells us by how much we would need to shorten $[l^F, u^F]$ so it could fit into $[l^G, u^G]$.
+\item The term
+$$
+D_G = \mathbf{1}(\alpha^G \leq \alpha^G)\times\max\{(u^G - l^G) - (u^F - l^F), 0\}
+$$
+measures the converse, i.e. overdispersion of $G$ relative to $F$.
+\item The term
+$$
+S^F = \max\{\mathbf{1}(\alpha^G \leq \alpha^F) \times \max(l^F - l^G, 0) + \mathbf{1}(\alpha^F \leq \alpha^G) \times \max(u^F - u^G, 0) + \max(l^F - u^G, 0) - D_F - D_G, 0\}
+$$
+sums over penalties for values in $\{l^F, u^F\}$ exceeding those from $\{l^G, u^G\}$ where they should not (only counting penalties not already covered in $D_F$ or $D_G$). It thus represents an \textit{upward shift} of $F$ relative to $G$.
+\item The term
+$$
+S^G = \max\{\mathbf{1}(\alpha^F \leq \alpha^G) \times \max(l^G - l^F, 0) + \mathbf{1}(\alpha^G \leq \alpha^F) \times \max(u^G - u^F, 0) + \max(l^G - u^F, 0) - D_G - D_F, 0\}
+$$
+accordingly represents an \textit{upward shift} of $G$ relative to $F$.
+\end{itemize}
+
+It can be shown that
+$$
+\text{ID}([l^F, u^F], [l^G, u^G], \alpha^F, \alpha^G) = D_F + D_G + S^F + S^G
+$$
+Intuitively the interval divergence measures by how much we need to move the quantiles of the interval with lower nominal coverage so it fits into the one with larger nominal coverage.
+
+
+## Approximating the Cramer distance using interval divergences
+
+Assuming $K$ is even, the $K$ equally spaced predictive quantiles of each distribution can seen as $L = K/2$ central prediction intervals with coverage levels $\alpha_i = 2i/(L + 1), i = 1, \dots, L$. Similarly to the definition of the WIS, the approximation \eqref{eq:approx_cd} can also be expressed in terms of these intervals as
+
+$$
+\text{CD}(F, G) \approx \frac{1}{2L(2L + 1)}\sum_{k = 1}^L\sum_{m = 1}^L \text{ID}([l^F_k, u^F_k], [l^G_m, u^G_m], \alpha_k^F, \alpha_m^G).
+$$
+This implies a decomposition of the Cramer distance into the four interpretable components defined for the interval divergence in the previous section. If $G$ is a one-point distribution, the CD reduces to the WIS and the proposed decomposition reduces to the well-known decomposition of the WIS into dispersion, overprediction and underprediction components.
+
+Note that in practice we usually have an uneven rather than even number $K$ of predictive quantiles. In this case the median needs to be treated separately (comparisons of the ``0% prediction interval'' need to be weighted down with a factor of 2; this is the same little quirk as the one identified by Ryan and Evan for the WIS a few months ago).
+The decomposition has the following properties:
+\begin{itemize}
+\item Additive shifts of the two distributions only affect the shift components, not the dispersion components.
+\item Consequently, if $G$ and $G$ are identical up to an additive shift, both dispersion components will be 0.
+\item If $F$ and $G$ are both symmetric and have the same median, the both shift components will be 0.
+\item I think that in general it is possible that both shift components or both dispersion components are greater than 0, which leads to a somewhat strange interpretation. But this should only concern constructed examples.
+\end{itemize}
+
+# Examples
 
 ```{r}
 # q_F: vector containing the (1:K)/(K + 1) quantiles of F
@@ -327,8 +409,6 @@ approx_cd_uneq <- function(q_F, tau_F, q_G, tau_G, approx_rule="left-sided"){
     return(cvm)
 }
 ```
-
-# Examples
 
 ## Equally-spaced intervals
 
