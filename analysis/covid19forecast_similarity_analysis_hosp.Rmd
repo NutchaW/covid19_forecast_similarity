@@ -46,6 +46,74 @@ We must first make some adjustments to the inc hosp forecast data, which have a 
 
 The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all targets, all probability levels, and no missing forecasts between January 28th, 2020 and June 10th 2021. We aggregate results for the five locations that have the highest number of number of COVID-19 hospitalizations during this period as well as the five locations with the lowest number for the same date range.
 
+```{r, out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
+fdat <- purrr::map_dfr(c("2021-01-28"), 
+                       function(dats){
+                         load_latest_forecasts(models = c("COVIDhub-ensemble","Karlen-pypm", "CU-select"),
+                                               last_forecast_date = dats,
+                                               source = "zoltar",
+                                               forecast_date_window_size = 6,
+                                               locations = "48",
+                                               types = c("quantile", "point"), 
+                                               verbose = FALSE,
+                                               targets = paste0(1:28," day ahead inc hosp"))}
+)
+
+fdat <- fdat %>%
+  dplyr::mutate(horizon_week = case_when(
+    horizon %in% 1:7 ~ 1,
+    horizon %in% 8:14 ~ 2, 
+    horizon %in% 15:21 ~ 3,
+    horizon %in% 21:28 ~ 4,
+  )) 
+
+p_base <- plot_forecasts(fdat, 
+                         models = c("COVIDhub-ensemble", "CU-select"),
+                         target_variable = "inc hosp", 
+                         truth_source = "HealthData",
+                         intervals = c(.5, .95), 
+                         fill_by_model = TRUE, 
+                         plot=FALSE,
+                         fill_transparency = 0.6,
+                         title = "Daily COVID-19 Inc Hosp Forecasts in TX by Horizon",
+                         subtitle = "COVIDhub-ensemble and CU-select",
+                         show_caption = FALSE)
+
+p <- p_base + 
+  scale_x_date(name=NULL, date_breaks = "1 weeks", date_labels = "%m-%d", 
+               limits = c(as.Date("2021-01-01"), as.Date("2021-02-22"))) +
+  theme(axis.ticks.length.x = unit(0.5, "cm"),
+        axis.text.x = element_text(vjust = 7, hjust = -0.2),
+        legend.position = "none")
+
+p_horizon <- plot_forecasts(fdat, 
+                         models = c("COVIDhub-ensemble", "CU-select"),
+                         target_variable = "inc hosp", 
+                         truth_source = "HealthData",
+                         intervals = c(.5, .95), 
+                         fill_by_model = TRUE, 
+                         plot=FALSE,
+                         plot_truth = FALSE,
+                         facet = .~horizon_week,
+                         fill_transparency = 0.6,
+                         title = "none",
+                         subtitle = "none",
+                         show_caption = FALSE)
+
+
+p_horizon <- p_horizon +
+  scale_x_date(name=NULL, date_breaks = "1 weeks", date_labels = "%m-%d") +
+  theme(axis.ticks.length.x = unit(0, "cm"),
+        axis.text.x = element_blank(),
+        legend.position = "none",
+        axis.title.y = element_blank()) +
+  facet_wrap(.~horizon_week, scales = "free_x")
+
+# horizonal
+p + p_horizon + plot_layout(widths = c(2, 1))
+```
+
+
 ```{r forecasts and functions}
 source("../functions/distance_func_script.R")
 source("../functions/distance_func_hosp_script.R")
