@@ -50,6 +50,13 @@ plot_day_of_week_effect <- function(point_forecasts, model_name) {
     labs(title = paste(model_name, "Forecasts"))
 }
 
+plot_day_of_week_effect_color <- function(point_forecasts, model_name) {
+  ggplot(filter(point_forecasts, model == model_name)) + 
+    geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) +
+    geom_line(aes(x = target_end_date, y = agg_hosp)) +
+    labs(title = paste(model_name, "Forecasts"))
+}
+
 ## plots separate lines w/ diff color dots for weekdays vs weekends
 plot_day_of_week_effect_sep <- function(point_forecasts, model_name) {
   ggplot(filter(point_forecasts, model == model_name), aes(group = day_type)) + 
@@ -205,7 +212,7 @@ dendro_plot_wk <- function(horizon, frame_name,metadata){
   dendro_p <- ggdendrogram(
     hclust(as.dist(get(frame_name)[[horizon]]), method = "ward.D",members = NULL)
     ,size = 2, rotate=TRUE) +
-    labs(title=paste0("Dendrogram - ",i, " wk ahead inc hosp"))+
+    labs(title=paste0(i, " wk ahead inc hosp"))+
     xlab("") +
     ylab("Mean Cramer's Distance") +
     theme(axis.text.x = element_text(size=5),
