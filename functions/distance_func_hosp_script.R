@@ -74,9 +74,10 @@ distance_heatmap_wk <- function(sum_dist,name,metadata=NULL){
     dplyr::group_by(model_1,model_2) %>%
     dplyr::mutate(ov_mean=mean(mean_dis)) %>%
     dplyr::ungroup() %>%
+    dplyr::left_join(short_hday, by=c("model_1"="model_abbr")) %>%
     dplyr::select(-"mean_dis") %>%
     dplyr::distinct(.,.keep_all = TRUE) %>%
-    dplyr::arrange(desc(ov_mean))
+    dplyr::arrange(desc(day_of_wk_effect))
   order_list <- unique(tmp$model_1)
   if (is.null(metadata)) {
     ggplot(sum_dist, aes(factor(model_1,levels=order_list),
@@ -95,16 +96,12 @@ distance_heatmap_wk <- function(sum_dist,name,metadata=NULL){
             legend.text = element_text(size=4),
             plot.margin=unit(c(0,0,0,0),"cm"))
   } else {
-    set1<-c("red","blue","pink","light blue", "purple")
+    set1<-c("red","blue","purple")
     color_set <- ifelse(metadata$day_of_wk_effect == "FALSE", 
                         set1[1], 
                         ifelse(metadata$day_of_wk_effect ==  "TRUE",
                                set1[2],
-                               ifelse(metadata$day_of_wk_effect == "ENS incl",
-                                      set1[3], 
-                                      ifelse(metadata$day_of_wk_effect == "ENS excl",
-                                             set1[4],
-                                             set1[5]))))
+                               set1[3]))
     type_color <-  color_set[order(match(metadata$model_abbr,order_list))]
     ggplot(sum_dist, aes(factor(model_1,levels=order_list),
                          factor(model_2,levels=order_list))) +

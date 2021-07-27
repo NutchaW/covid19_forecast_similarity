@@ -469,12 +469,20 @@ pair_data_low <- approx_cd_list_low_thurs[[3]] %>%
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
 
-```{r,out.width="95%", fig.align='center', warning=FALSE}
+```{r heatmaps thurs,out.width="95%", fig.align='center', warning=FALSE}
 distance_heatmap_wk(approx_cd_list_high_thurs[[3]],
-                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta)  
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta) 
 
 distance_heatmap_wk(approx_cd_list_low_thurs[[3]],
                 "Mean Approx. CD of Inc Hosp Forecasts by Horizon - Low Count Locations", recent_hmeta)
+    
+
+distance_heatmap_wk(filter(approx_cd_list_high_thurs[[3]], 
+                           model_1 != "Google_Harvard-CPF", model_2 != "Google_Harvard-CPF"),
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta)
+distance_heatmap_wk(filter(approx_cd_list_low_thurs[[3]], 
+                           model_1 != "Google_Harvard-CPF", model_2 != "Google_Harvard-CPF"),
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta)
 ```
 
 Google_Harvard-CPF is generally the least similar to the other models for both the high count and low count locations. This is true across all horizons for the high count locations, but only true for the one and two week horizons of the low count locations. Covid19Sim-Simulator, JHUAPL-Bucky, and JHUAPL-Gecko show similar Cramer's Distances at three and four week horizons at the low count locations. However, it is important to note the small scale observed for the low count locations may explain why three models have such similar Cramer's Distances.
@@ -782,12 +790,20 @@ pair_data_low <- approx_cd_list_low_sat[[3]] %>%
 
 We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
 
-```{r,out.width="95%", fig.align='center', warning=FALSE}
+```{r heatmaps sat,out.width="95%", fig.align='center', warning=FALSE}
 distance_heatmap_wk(approx_cd_list_high_sat[[3]],
-                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta)  
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta) 
 
 distance_heatmap_wk(approx_cd_list_low_sat[[3]],
                 "Mean Approx. CD of Inc Hosp Forecasts by Horizon - Low Count Locations", recent_hmeta)
+    
+
+distance_heatmap_wk(filter(approx_cd_list_high_sat[[3]], 
+                           model_1 != "Google_Harvard-CPF", model_2 != "Google_Harvard-CPF"),
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta)
+distance_heatmap_wk(filter(approx_cd_list_low_sat[[3]], 
+                           model_1 != "Google_Harvard-CPF", model_2 != "Google_Harvard-CPF"),
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta)
 ```
 
 Similarly to the Thursday forecasts, Google_Harvard-CPF is generally the least similar to the other models for both the high count and low count locations. This is true across all horizons for the high count locations, but only true for the one and two week horizons of the low count locations. Covid19Sim-Simulator is the most dissimilar for the three and four week horizons of the low count locations. However, it is important to note the small scale observed for the low count locations may explain why this model has a higher Cramer's Distance at longer horizons rather than a true pattern.
