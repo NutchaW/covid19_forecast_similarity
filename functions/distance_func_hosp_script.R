@@ -50,6 +50,13 @@ plot_day_of_week_effect <- function(point_forecasts, model_name) {
     labs(title = paste(model_name, "Forecasts"))
 }
 
+plot_day_of_week_effect_color <- function(point_forecasts, model_name) {
+  ggplot(filter(point_forecasts, model == model_name)) + 
+    geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) +
+    geom_line(aes(x = target_end_date, y = agg_hosp)) +
+    labs(title = paste(model_name, "Forecasts"))
+}
+
 ## plots separate lines w/ diff color dots for weekdays vs weekends
 plot_day_of_week_effect_sep <- function(point_forecasts, model_name) {
   ggplot(filter(point_forecasts, model == model_name), aes(group = day_type)) + 
@@ -67,9 +74,10 @@ distance_heatmap_wk <- function(sum_dist,name,metadata=NULL){
     dplyr::group_by(model_1,model_2) %>%
     dplyr::mutate(ov_mean=mean(mean_dis)) %>%
     dplyr::ungroup() %>%
+    dplyr::left_join(short_hday, by=c("model_1"="model_abbr")) %>%
     dplyr::select(-"mean_dis") %>%
     dplyr::distinct(.,.keep_all = TRUE) %>%
-    dplyr::arrange(desc(ov_mean))
+    dplyr::arrange(desc(day_of_wk_effect))
   order_list <- unique(tmp$model_1)
   if (is.null(metadata)) {
     ggplot(sum_dist, aes(factor(model_1,levels=order_list),
@@ -88,16 +96,12 @@ distance_heatmap_wk <- function(sum_dist,name,metadata=NULL){
             legend.text = element_text(size=4),
             plot.margin=unit(c(0,0,0,0),"cm"))
   } else {
-    set1<-c("red","blue","pink","light blue", "purple")
+    set1<-c("red","blue","purple")
     color_set <- ifelse(metadata$day_of_wk_effect == "FALSE", 
                         set1[1], 
                         ifelse(metadata$day_of_wk_effect ==  "TRUE",
                                set1[2],
-                               ifelse(metadata$day_of_wk_effect == "ENS incl",
-                                      set1[3], 
-                                      ifelse(metadata$day_of_wk_effect == "ENS excl",
-                                             set1[4],
-                                             set1[5]))))
+                               set1[3]))
     type_color <-  color_set[order(match(metadata$model_abbr,order_list))]
     ggplot(sum_dist, aes(factor(model_1,levels=order_list),
                          factor(model_2,levels=order_list))) +
@@ -205,7 +209,7 @@ dendro_plot_wk <- function(horizon, frame_name,metadata){
   dendro_p <- ggdendrogram(
     hclust(as.dist(get(frame_name)[[horizon]]), method = "ward.D",members = NULL)
     ,size = 2, rotate=TRUE) +
-    labs(title=paste0("Dendrogram - ",i, " wk ahead inc hosp"))+
+    labs(title=paste0(i, " wk ahead inc hosp"))+
     xlab("") +
     ylab("Mean Cramer's Distance") +
     theme(axis.text.x = element_text(size=5),

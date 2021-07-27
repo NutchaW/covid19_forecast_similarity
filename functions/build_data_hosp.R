@@ -29,11 +29,11 @@ hosp_truth <- load_truth("HealthData",
 hlocs_high <- hosp_truth$location[1:5]
 
 
-hosp_truth_thurs_low <- hosp_truth_thurs %>%
+hosp_truth_low <- hosp_truth %>%
   dplyr::arrange(cum_hosp) %>%
   dplyr::filter(as.numeric(location)<60)
 
-hlocs_low <- hosp_truth_thurs_low$location[1:5]
+hlocs_low <- hosp_truth_low$location[1:5]
 
 
 ## Point Forecasts ------------------------------------------------------------------- ############
