@@ -1,7 +1,7 @@
 ---
 title: "COVID-19 Forecast Similarity Analysis for Hospitalizations"
 author: "Johannes Bracher, Evan Ray, Nick Reich, Nutcha Wattanachit, Li Shandross"
-date: "07/20/2021"
+date: "07/30/2021"
 header-includes:
    - \usepackage{tabularx}
    - \usepackage{hyperref}
@@ -37,14 +37,38 @@ knitr::opts_chunk$set(echo=FALSE,
                        fig.align = 'center')
 ```
 
+```{r functions and targets}
+source("../functions/distance_func_script.R")
+source("../functions/distance_func_hosp_script.R")
 
-# COVID-19 Forecasting Model Similarity Analysis for 1-4 Week Ahead Incident Hospitalization 
+# set targets for analysis
+target_horizon <- 1:4
+target_var <- "inc hosp"
+```
 
-In this analysis, we extend the work of Bracher, et. al that evaluates the similarity between Covid-19 models using Cramer's distance. This work was applied to forecasts for incident deaths (inc deaths) and incident cases (inc cases) and here we apply it to incident hospitalizations (inc hosp).
 
-We must first make some adjustments to the inc hosp forecast data, which have a temporal resolution of "day" instead of "week," unlike inc case and inc death. This presents a challenge because the horizons will be different for the same target end date if the forecast dates between two models differ by only a single day. (This is not an issue when the temporal resolution is in terms of weeks, which are defined by epidemiological week, not the number of days between forecast date and target end date.) Thus, we create a new variable called horizon week to solve this issue. This variable counts horizons between 1 and 7 to have a horizon week of 1, horizons between 8 and 14 to have a horizon week of 2, etc. Hence, the analyses used on inc death and inc cases should be able to be applied easily to the inc hosp data.
+Over the course of the pandemic, many teams across the United States have worked to create forecasting models for Covid-19 cases, deaths, and hospitalizations. We choose to examine models specifically forecasting incident hospitalizations. But how similar are these models? Are there patterns of similarity, perhaps due to data source, modeling technique, or another incorporated factor? Or do models that tend to perform well tend to be similar? These questions are all reasons why we might be interested in measuring the similarities between covid-19 forecasting models. 
 
-The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all targets, all probability levels, and no missing forecasts between January 28th, 2020 and June 10th 2021. We aggregate results for the five locations that have the highest number of number of COVID-19 hospitalizations during this period as well as the five locations with the lowest number for the same date range.
+Extending the work of Bracher et. al, we choose Cramer's Distance as a metric to evaluate the similarity between models. The Cramer's Distance of two predictive distributions $F$ and $G$ is defined as follows: 
+
+\begin{align}
+\text{CD}(F, G) &= \int_{-\infty}^\infty(F(x) - G(x))^2 dx
+\end{align}
+
+where $F(x)$ and $G(x)$ are the two cumulative distribution functions respectively. 
+
+However, we actually only know $K$ quantiles from $F$ and $G$ rather than their entire distributions. Thus, we must approximate their Cramer's Distance, and we do so by using Bracher et. al's trapezoidal rule: 
+
+\begin{align}
+\text{CD}(F,G) &\approx\sum^{2K-1}_{j=1}\int^{q_{j+1}}_{q_j}{F(x)−G(x)}^2\\
+&\approx\sum^{2K-1}_{j=1}\frac{\{\hat{F}(q_j)-\hat{G}(q_j)\}^2+\{\hat{F}(q_{j+1})-\hat{G}(q_{j+1})\}^2}{2}(q_{j+1}-q_{j})\\
+\end{align}
+
+where $q_j$ is the jth quantile.
+
+Cramer's Distance (as well as it's approximation) is an ideal quantitative measurement for measuring the similarity of covid-19 forecasting models because it is not only relatively easy to compute but also is compatible with the weighted interval score (WIS) used to score forecasts by the COVID-19 Forecast Hub. 
+
+Below, Figure 1 illustrates how Cramer's Distance is calculated between two models in this analysis. Forecasts made on a single date are split into 1 to 4 week horizons, with Cramer's Distance calculated separately at each horizon.
 
 ```{r, out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
 fdat <- purrr::map_dfr(c("2021-01-28"), 
@@ -106,23 +130,55 @@ p_horizon <- p_horizon +
   theme(axis.ticks.length.x = unit(0, "cm"),
         axis.text.x = element_blank(),
         legend.position = "none",
-        axis.title.y = element_blank()) +
-  facet_wrap(.~horizon_week, scales = "free_x")
+        axis.title.y = element_blank()) + 
+  facet_grid(.~horizon_week, scales = "free_x")
 
-# horizonal
-p + p_horizon + plot_layout(widths = c(2, 1))
+
+# calculate CD for each horizon
+cd_plot_frame <- read.csv("../data/quantile_frame_hosp_top.csv")
+cd_plot_frame$target_end_date <- anydate(cd_plot_frame$target_end_date)
+cd_plot_frame <- cd_plot_frame %>%  
+  filter(model %in% c("CU-select","COVIDhub-ensemble"),
+         location == 48,
+         forecast_date <= as.Date("2021-01-28")) %>%
+  frame_format2()
+
+q_set <- unique(cd_plot_frame$quantile) 
+cd_plot_list <- build_distance_frame(cd_plot_frame, 
+                           horizon_list=c(1:4),
+                           target_list="inc hosp",
+                           approx_rule="trapezoid_riemann",
+                           tau_F=q_set,tau_G=q_set)
+
+cd_plot_cd <- cd_plot_list[[1]] %>%
+  filter(approx_cd != 0) %>%
+  distinct(approx_cd, .keep_all = TRUE) %>%
+  select(horizon, approx_cd, target_end_date)
+
+cd_plot_cd$target_end_date <- anydate(cd_plot_cd$target_end_date)
+cd_plot_cd$approx_cd <- round(cd_plot_cd$approx_cd, 2)
+
+
+p 
+p_horizon 
+```
+
+```{r}
+knitr::kable(select(cd_plot_cd, -target_end_date), 
+             col.names = c("Horizon","Approx. CD"))
 ```
 
 
-```{r forecasts and functions}
-source("../functions/distance_func_script.R")
-source("../functions/distance_func_hosp_script.R")
+Bracher et. al's work on model similarity specifically focused on incident case and death (inc case and inc death, respectively) forecasts, while this analysis is focusing on incident hospitalizations. Incident hospitalization (inc hosp) data has daily targets instead of weekly ones, like inc case and inc death data. This presents an issue with unaligned forecasts because each model only makes predictions on a single day per week but not all models make their forecasts on the same day. That is, forecasts made in the same week but on different days will be predicting for different target end dates, even if they share the horizon. (This is not an issue when the temporal resolution is in terms of weeks, which are defined by epidemiological week, not the number of days between forecast date and target end date.) Thus, we create a new relative horizon variable variable called horizon week to prevent unaligned forecasts. This variable counts horizons between 1 and 7 days to have a horizon week of 1, horizons between 8 and 14 days to have a horizon week of 2, etc. With this new variable, we can easily apply similar analyses from Bracher et. al to inc hosp data. 
 
-# set targets for analysis
-target_horizon <- 1:4
-target_var <- "inc hosp"
+## Forecast Inclusion Criteria
+
+The pairwise approximated Cramer's distances are calculated for the models that have complete submissions for all targets, all probability levels, and no missing forecasts between January 28th, 2021 and June 10th 2021. We aggregate results for the five locations that have the highest number of cumulative COVID-19 hospitalizations during this period as well as the five locations with the lowest number, then perform the analysis on both "high count" and "low count" groupings. 
+
+The high count locations are FL, TX, NY, CA, PA while the low count locations are VT, HI, AK, WY, SD. 
 
 
+```{r read-in forecasts and truth, message=FALSE}
 # read in forecasts
 ## high count - Thursday
 wide_frame_hosp_high_thurs <- read.csv("../data/quantile_frame_hosp_top.csv") %>%
@@ -170,7 +226,7 @@ hosp_truth_high <- load_truth("HealthData",
                          temporal_resolution="weekly",
                          data_location = "remote_hub_repo")
 hosp_truth_high <- hosp_truth_high %>%
-  dplyr::filter(target_end_date >= filtered_start_date,
+  dplyr::filter(target_end_date >= as.Date("2021-01-28"),
                 target_end_date <= end_date_sat,
                 geo_type=="state",
                 location_name %in% unique(wide_frame_hosp_high_thurs$location_name)) 
@@ -179,7 +235,7 @@ hosp_truth_low <- load_truth("HealthData",
                          "inc hosp", 
                          temporal_resolution="weekly",
                          data_location = "remote_hub_repo") %>%
-  dplyr::filter(target_end_date >= filtered_start_date,
+  dplyr::filter(target_end_date >= as.Date("2021-01-28"),
                 target_end_date <= end_date_sat,
                 geo_type=="state",
                 location_name %in% unique(wide_frame_hosp_low_thurs$location_name)) 
@@ -234,27 +290,27 @@ h_methods <- select(recent_hmeta, c(model_abbr, methods, methods_long))
 
 ```
 
+This analysis looks into whether the incorporation of day of the week effects impacts model similarity, e.g. do models that have day of the week effects more similar to each other than those without. We define day of the week effects to be cyclic weekly patterns for which a specific day or group of days specific show higher or lower incident hospitalization values compared to other days. The hospitalization truth data for high count locations clearly shows a day of the week effect in which weekends have noticeably fewer incident hospitalizations in comparison to weekdays. However, hospitalization truth data for low count locations is a little less clear. 
 
-### Day of the Week Effects
+We plot point forecasts with a horizon week of 1 to determine which models include day of the week effects, first looking at high count locations, then low count locations. 
 
-We can plot point forecasts to see if any of the models incorporate day of the week effects (i.e. do forecasts certain days of the week specifically show lower/higher hospitalizations compared to other days). 
-
-```{r, out.width="95%", fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
-###### Plot model forecasts and truth data for high hosp locs -------------------------------------- #
+```{r day of wk effects high, fig.height=2.75, fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
 # truth data
 hosp_truth_high2 <- hosp_truth_high %>% 
   select(-c(location, 6:11)) %>%
   group_by(target_end_date) %>%
   mutate(agg_hosp = sum(value)) %>%
   distinct(agg_hosp, .keep_all = TRUE) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"),
+         recent_tues = floor_date(target_end_date, "weeks", 
+                                 week_start = getOption("lubridate.week.start", 2)))
 
-ggplot(hosp_truth_high2, aes(group = day_type)) + 
-  geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) +
-  geom_line(aes(x = target_end_date, y = agg_hosp, linetype = day_type, alpha = 0.5)) +
-  labs(title = "Truth Data") +
-  scale_color_manual(values = c("#dd7e6b", "#1c4587")) + 
-  theme(legend.position = "none")
+t_h <- ggplot(hosp_truth_high2, aes(x = target_end_date, y = agg_hosp)) + 
+  geom_point(aes(color = day_type)) +
+  geom_line(aes(group = recent_tues)) +
+  labs(title = "Truth Data - High Count", 
+       x = "target end date" , y= "inc hosp") +
+  theme(legend.position = "bottom")
 
 # forecasts
 hosp_pt_high <- read.csv("../data/point_frame_hosp_top.csv")
@@ -266,42 +322,54 @@ hosp_pt_high <- hosp_pt_high %>%
   group_by(model, target_end_date, horizon_week, horizon) %>%
   mutate(agg_hosp = sum(value)) %>%
   distinct(agg_hosp, .keep_all = TRUE) %>%
-  filter(horizon_week == 1) %>%
+  filter(horizon_week == 1, model %in% short_hdata$model_abbr) %>%
   mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend")) %>%
   mutate(forecast_day = weekdays(forecast_date))
 
 hosp_pt_high$target_end_date <- anydate(hosp_pt_high$target_end_date)
 hosp_pt_high$day_type <- as.factor(hosp_pt_high$day_type)
 
-plot_day_of_week_effect_sep(hosp_pt_high, "COVIDhub-ensemble") # as.Date("2021-02-13")
-plot_day_of_week_effect_sep(hosp_pt_high, "JHUAPL-Bucky") # as.Date("2021-02-27")
-plot_day_of_week_effect_sep(hosp_pt_high, "JHUAPL-Gecko")
-plot_day_of_week_effect_sep(hosp_pt_high, "Google_Harvard-CPF") 
+p1_h <- plot_day_of_week_effect_color(hosp_pt_high, "COVIDhub-ensemble") +
+  theme(legend.position = "bottom")
+p2_h <- plot_day_of_week_effect_color(hosp_pt_high, "JHUAPL-Bucky") # as.Date("2021-02-27")
+p3_h <- plot_day_of_week_effect_color(hosp_pt_high, "JHUAPL-Gecko")
 
-plot_day_of_week_effect_sep(hosp_pt_high, "Covid19Sim-Simulator")
-plot_day_of_week_effect_sep(hosp_pt_high, "CU-select")
-plot_day_of_week_effect_sep(hosp_pt_high, "Karlen-pypm") 
-plot_day_of_week_effect_sep(hosp_pt_high, "JHUAPL-SLPHospEns")
-plot_day_of_week_effect_sep(hosp_pt_high, "MOBS-GLEAM_COVID")
+p4_h <- plot_day_of_week_effect_color(hosp_pt_high, "Google_Harvard-CPF") 
+p5_h <- plot_day_of_week_effect_color(hosp_pt_high, "Covid19Sim-Simulator")
+p6_h <- plot_day_of_week_effect_color(hosp_pt_high, "CU-select")
+p7_h <- plot_day_of_week_effect_color(hosp_pt_high, "Karlen-pypm") 
+p8_h <- plot_day_of_week_effect_color(hosp_pt_high, "JHUAPL-SLPHospEns")
+p9_h <- plot_day_of_week_effect_color(hosp_pt_high, "MOBS-GLEAM_COVID")
+
+t_h + p1_h + plot_layout()
+
 ```
 
-Truth data has always shown day of the week effects (weekends always have lower inc hosp) but the models seemed to predict lower inc hosp on Tuesdays for the end of December/beginning of January, then most seem to switch to lower weekend end inc hosp sometime during 2021. 
+```{r}
+# new code chunk to have default plot size
+p2_h + p3_h + p4_h + p5_h + plot_layout(ncol = 2)
+p6_h + p7_h + p8_h + p9_h + plot_layout(ncol = 2)
+```
 
-```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
-###### Plot model forecasts and truth data for low hosp locs ---------------------------------------- #
+We can see that only two models, JHUAPL-Bucky and JHUAPL-Gecko, incorporate day of week effects based on the high count data.  
 
+```{r day of wk effects low, fig.height=2.75, fig.align='center', message=FALSE, warning=FALSE, comment=FALSE}
 # truth data
 hosp_truth_low2 <- hosp_truth_low %>% 
  # select(-c(location, 6:11)) %>%
   group_by(target_end_date) %>%
   mutate(agg_hosp = sum(value)) %>%
   distinct(agg_hosp, .keep_all = TRUE) %>%
-  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"))
+  mutate(day_type = ifelse(wday(target_end_date) %in% 2:6, "weekday", "weekend"),
+         recent_tues = floor_date(target_end_date, "weeks", 
+                                 week_start = getOption("lubridate.week.start", 2)))
 
-ggplot(hosp_truth_low2, aes(group = day_type)) + 
-  geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) +
-  geom_line(aes(x = target_end_date, y = agg_hosp, linetype = day_type)) +
-  labs(title = "Truth Data")
+t_l <- ggplot(hosp_truth_low2, aes(x = target_end_date, y = agg_hosp)) + 
+  geom_point(aes(color = day_type)) +
+  geom_line(aes(group = recent_tues)) +
+  labs(title = "Truth Data - Low Count", 
+       x = "target end date" , y= "inc hosp") +
+  theme(legend.position = "bottom")
 
 # foreasts
 hosp_pt_low <- read.csv("../data/point_frame_hosp_bottom.csv")
@@ -317,23 +385,34 @@ hosp_pt_low <- hosp_pt_low %>%
 hosp_pt_low$target_end_date <- anydate(hosp_pt_low$target_end_date)
 hosp_pt_low$day_type <- as.factor(hosp_pt_low$day_type)
 
-plot_day_of_week_effect_sep(hosp_pt_low, "COVIDhub-ensemble") # as.Date("2021-02-13")
-plot_day_of_week_effect_sep(hosp_pt_low, "JHUAPL-Bucky") # as.Date("2021-02-27")
-plot_day_of_week_effect_sep(hosp_pt_low, "JHUAPL-Gecko")
-plot_day_of_week_effect_sep(hosp_pt_low, "Google_Harvard-CPF") 
+p1_l <- plot_day_of_week_effect_color(hosp_pt_low, "COVIDhub-ensemble") # as.Date("2021-02-13")
+p2_l <- plot_day_of_week_effect_color(hosp_pt_low, "JHUAPL-Bucky") # as.Date("2021-02-27")
+p3_l <- plot_day_of_week_effect_color(hosp_pt_low, "JHUAPL-Gecko")
+p4_l <- plot_day_of_week_effect_color(hosp_pt_low, "Google_Harvard-CPF") 
 
-plot_day_of_week_effect_sep(hosp_pt_low, "Covid19Sim-Simulator")
-plot_day_of_week_effect_sep(hosp_pt_low, "CU-select")
-plot_day_of_week_effect_sep(hosp_pt_low, "Karlen-pypm") 
-plot_day_of_week_effect_sep(hosp_pt_low, "JHUAPL-SLPHospEns")
-plot_day_of_week_effect_sep(hosp_pt_low, "MOBS-GLEAM_COVID")
+p5_l <- plot_day_of_week_effect_color(hosp_pt_low, "Covid19Sim-Simulator")
+p6_l <- plot_day_of_week_effect_color(hosp_pt_low, "CU-select")
+p7_l <- plot_day_of_week_effect_color(hosp_pt_low, "Karlen-pypm") 
+p8_l <- plot_day_of_week_effect_color(hosp_pt_low, "JHUAPL-SLPHospEns")
+p9_l <- plot_day_of_week_effect_color(hosp_pt_low, "MOBS-GLEAM_COVID")
+
+
+t_l + p1_l + plot_layout()
 ```
 
-The low hosp location truth data doesn't present such a clear pattern as to day of the week effects that suggest that weekends or weekdays generally have less inc hosp values. However, most of the models seem to switch to incorporating a day of the week effect at about the same time as that for the high count values. 
+```{r}
+# new code chunk to have default plot size
+p2_l + p3_l + p4_l + p5_l + plot_layout(ncol = 2)
+p6_l + p7_l + p8_l + p9_l + plot_layout(ncol = 2)
+```
+
+We reiterate that low count location hospitalization truth data doesn't show as clear day of the week effects as high count truth data. However, we can still see that the same two models, JHUAPL-Bucky and JHUAPL-Gecko, do show day of the week effects for low count locations. Thus, we can categorize models into three categories: true (shows a day of the week effect), false (does not show a day of the week effect), or ensemble (a model built from other models that may or may not include day of the week effects). We create a third ensemble category because ensembles themselves do not incorporate day of the week effects, as they are a collection of other models, but the included models may or may not incorporate day of the week effects.
+
+This categorization is shown in the table below. 
 
 ```{r}
 recent_hmeta$day_of_wk_effect <- 
-  as.factor(c("FALSE", "ENS incl", "FALSE", "FALSE", "TRUE", "TRUE", "ENS excl", "FALSE", "FALSE"))
+  as.factor(c("FALSE", "ENS", "FALSE", "FALSE", "TRUE", "TRUE", "ENS", "FALSE", "FALSE"))
 
 short_hday <- select(recent_hmeta, c(model_abbr, day_of_wk_effect))
 
@@ -356,11 +435,13 @@ day_test <- hosp_pt_high %>%
   # the same horizon week
 ```
 
+Given that hospitalization forecasts are daily, there are seven times as many forecasts made for incident hospitalizations as compared to incident cases and incident deaths. Because we are looking at day of the week effects, we choose to focus on only two days of the week for our analysis, one weekday and one weekend (Thursday and Saturday, respectively). This way, we can investigate if there seems to be a meaningful difference between model similarity on a weekday versus on a weekend.
+
 
 ## Weekday Analysis
 This analysis only examines target end dates for a single day of the week, Thursday, to account for models that include day of the week effects. 
 
-```{r build data and figures}
+```{r build data and figures thurs}
 # calculate distance matrices
 q_set_hosp_thurs <- unique(h_frame_high_thurs$quantile) 
 approx_cd_list_high_thurs <- build_distance_frame(h_frame_high_thurs, 
@@ -384,7 +465,8 @@ total_frame_high_thurs <- approx_cd_list_high_thurs[[1]] %>%
   dplyr::ungroup() %>%
   dplyr::select(-c("approx_cd","location")) %>%
   dplyr::distinct()
-total_frame_high_thurs$target_end_date <- as.Date(total_frame_high_thurs$target_end_date,origin="1980-01-01")
+total_frame_high_thurs$target_end_date <- 
+  as.Date(total_frame_high_thurs$target_end_date,origin="1980-01-01")
 
 h_frame_mean_high_thurs <- lapply(1:4, function(x) cd_matrix(approx_cd_list_high_thurs[[3]],x))
 
@@ -466,7 +548,7 @@ pair_data_low <- approx_cd_list_low_thurs[[3]] %>%
 ```
 
 
-We can visualize the mean approximated pairwise distances across all time points in a heat map shown below. The distance from the model to itself is zero. The $x-$axis is arranged based in an ascending order of the model's approximate pairwise distance from the COVIDhub-ensemble. So, the first model is the model that is most dissimilar (on average) to the ensemble in this time frame.
+First, we visualize the mean approximated pairwise Cramer's Distance across the entire period of interest in the heatmaps shown below. The distance from the model to itself is zero. The $x-$axis is arranged based on the categorization of models outlined above: blue is incorporates a day of week effect, red is does not incorporate a day of the week effect, and purple is ensemble model. 
 
 
 ```{r heatmaps thurs,out.width="95%", fig.align='center', warning=FALSE}
@@ -475,27 +557,24 @@ distance_heatmap_wk(approx_cd_list_high_thurs[[3]],
 
 distance_heatmap_wk(approx_cd_list_low_thurs[[3]],
                 "Mean Approx. CD of Inc Hosp Forecasts by Horizon - Low Count Locations", recent_hmeta)
-    
+```
 
+Google_Harvard-CPF is generally the least similar to the other models for both the high count and low count locations. This is true across all horizons for the high count locations, but only true for the one and two week horizons of the low count locations. Covid19Sim-Simulator, JHUAPL-Bucky, and JHUAPL-Gecko show similar Cramer's Distances at three and four week horizons at the low count locations. However, it is important to note the small scale observed for the low count locations may explain why three models have such similar Cramer's Distances.
+
+Since Google_Harvard-CPF is substantially dissimilar to the other models, especially for high count locations, it obscures any potential patterns about day of the week effect and model similarity that we might find among the other models. Thus, we plot the heat maps again, this time excluding Google_Harvard-CPF. 
+
+```{r heatmaps thurs no Google Harvard,out.width="95%", fig.align='center', warning=FALSE}
 distance_heatmap_wk(filter(approx_cd_list_high_thurs[[3]], 
                            model_1 != "Google_Harvard-CPF", model_2 != "Google_Harvard-CPF"),
                 "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta)
 distance_heatmap_wk(filter(approx_cd_list_low_thurs[[3]], 
                            model_1 != "Google_Harvard-CPF", model_2 != "Google_Harvard-CPF"),
-                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - High Count Locations", recent_hmeta)
+                "Mean Approx. CD of Inc Hosp Forecasts by Horizon - Low Count Locations", recent_hmeta)
 ```
-
-Google_Harvard-CPF is generally the least similar to the other models for both the high count and low count locations. This is true across all horizons for the high count locations, but only true for the one and two week horizons of the low count locations. Covid19Sim-Simulator, JHUAPL-Bucky, and JHUAPL-Gecko show similar Cramer's Distances at three and four week horizons at the low count locations. However, it is important to note the small scale observed for the low count locations may explain why three models have such similar Cramer's Distances.
-
-Covid19Sim-Simulator is the second least similar model for the high count locations, but its Cramer's Distance is much smaller than that of Google_Harvard-CPF. Of note is similar differences between models at all horizons for high count locations, unlike the results shown for inc cases and inc deaths which show substantial differences between models as horizon length increases. 
-
-For low count locations, models with day of the week effect tend to have higher Cramer's Distances, but there doesn't seem to be much of a pattern for high count locations. 
+We can see that for both high and low count locations, at all horizons, Covid19Sim-Simulator becomes the most dissimilar model without Google_Harvard-CPF present. JHUAPL-Bucky seems to have the next highest Cramer's Distances at 1 to 3 week horizons, but at a 4-week horizon, the models without a day of the week effect show higher Cramer's Distances. Low count locations show that models with day of the week effect have greater dissimilarity than models without. However, the low count location results can be rather sensitive to small variations due to chance alone given their small Cramer's Distance values.
 
 
-We can also look at the approximated pairwise distances to see how the models become more similar or dissimilar over time.
-
-
-
+We can also look at the approximated pairwise distances over time to see how the models become more similar or dissimilar at different points during the period of interest.
 
 ```{r,out.width="95%", fig.align='center'}
 ot_data_high_thurs <- total_frame_high_thurs %>% 
@@ -512,50 +591,57 @@ ot_data_low_thurs <- total_frame_low_thurs %>%
 
 
 scatter_wk(ot_data_high_thurs,
-        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nHigh Count Locations",
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nThursday, High Count Locations",
         recent_hmeta,
         smooth_tf = TRUE) 
 scatter_wk(ot_data_low_thurs,
-        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nLow Count Locations",
+        "Mean Approx. CD from COVIDhub-ensemble Over Time - \nThursday, Low Count Locations",
         recent_hmeta,
         smooth_tf = TRUE) 
 ```
 
-The scatterplots show that the Google_Harvard-CPF, Covid19Sim-Simulator, and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other models. This seems to align with the results shown in the heat maps above that show that Google_Harvard-CPF, Covid19Sim-Simulator, and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Google_Harvard-CPF is very different from the ensemble model from February until April. However, in low count locations, JHUAPL-Bucky shows a peak in around March, although this peak is not largely different, as the scale is pretty small.
+The scatterplots show that the Google_Harvard-CPF, Covid19Sim-Simulator, and JHUAPL-Bucky models tend to differ from the Covidhub-ensemble model compared to the other models. This seems to align with the results shown in the heat maps above that show that Google_Harvard-CPF, Covid19Sim-Simulator, and JHUAPL-Bucky tend to have the highest mean Cramer's Distance from the other models. In high count locations, Google_Harvard-CPF is substantially different from the ensemble model during the entire period of interest. However, in low count locations, JHUAPL-Bucky shows a peak in March, although this peak is actually rather small, given the scale. 
 
 Whether models incorporate a day of the week effect does not seem to have an impact on how much the model differs from the ensemble, nor as to when it differs greatly. 
 
 
-```{r,out.width="95%", fig.align='center', warning=FALSE, message=FALSE}
+```{r, fig.height = 3.5, fig.align='center', warning=FALSE, message=FALSE}
 # plot truth data
-ggplot(hosp_truth_high, aes(x = target_end_date, y = value, color = location_name)) + 
+tr_h <- ggplot(rename(hosp_truth_high, Location = `abbreviation`), 
+               aes(x = target_end_date, y = value, color = Location)) + 
       geom_point(alpha=0.6,size=0.8) + 
       stat_smooth(alpha=0.4,size=0.5,aes(x = target_end_date, y = value), method = "loess",
                   formula = y ~ x, se = FALSE) +
-      ggtitle("Hosp Truth Over Time - High Count Locations") +
+      ggtitle("Hosp Truth Over Time - \nHigh Count Locations") +
       ylab("Inc Hosp") +
       xlab("Forecast End Date") +
       theme(legend.text = element_text(size=5),
             legend.title = element_text(size=9),
             axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
+            legend.key.size = unit(0.5, 'cm'),
+            legend.position = "bottom")+
       scale_x_date(date_breaks = "1 month",
                    date_labels = "%m-%y")
 
-ggplot(hosp_truth_low, aes(x = target_end_date, y = value, color = location_name)) + 
+tr_l <- ggplot(rename(hosp_truth_low, state = `abbreviation`), 
+               aes(x = target_end_date, y = value, color = state)) + 
       geom_point(alpha=0.6,size=0.8) + 
       stat_smooth(alpha=0.4,size=0.5,aes(x = target_end_date, y = value), method = "loess",
                   formula = y ~ x, se = FALSE) +
-      ggtitle("Hosp Truth Over Time - Low Count Locations") +
-      ylab("Inc Hosp") +
+      ggtitle("Hosp Truth Over Time - \nLow Count Locations") +
       xlab("Forecast End Date") +
       theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=9),
+            legend.title = element_blank(),
             axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
+            axis.title.y = element_blank(),
+            legend.key.size = unit(0.5, 'cm'),
+            legend.position = "bottom")+
       scale_x_date(date_breaks = "1 month",
                    date_labels = "%m-%y")
+
+tr_h + tr_l + plot_layout(ncol = 2)
 ```
+
 It seems that Google_Harvard-CPF and Covid19Sim-Simulator's differences from the ensemble model follow the trends shown by the truth data. 
 
 
@@ -606,7 +692,6 @@ ggplot(cd_diff_low_thurs, aes(x=target_end_date, y=mean_approx_cd)) +
                    date_labels = "%m-%y")
 ```
 These plots indicate that the difference between the models at the high count locations seems to shrink over time. Since the low count locations approx CD is so low, it is difficult to draw conclusions from the plots. 
-
 
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
@@ -682,7 +767,7 @@ Overall, it seems that Google_Harvard-CPF is consistently the most dissimilar fr
 
 Now we look at forecasts with a target end date on a Saturday to see if day of the week effects change model similarity. We expect forecasts for weekends to show the impact of day of the week effects more strongly than weekdays. 
 
-```{r build data and figures}
+```{r build data and figures sat}
 # calculate distance matrices
 q_set_hosp_sat <- unique(h_frame_high_sat$quantile) 
 approx_cd_list_high_sat <- build_distance_frame(h_frame_high_sat, 
@@ -850,6 +935,8 @@ These scatterplots are nearly the same as the ones shown above.
 
 ```{r,out.width="95%", fig.align='center', warning=FALSE, message=FALSE}
 # plot truth data - note these are repeated figures from above
+
+## FIXME - make truth data start from 2/18
 ggplot(hosp_truth_high, aes(x = target_end_date, y = value, color = location_name)) + 
       geom_point(alpha=0.6,size=0.8) + 
       stat_smooth(alpha=0.4,size=0.5,aes(x = target_end_date, y = value), method = "loess",
