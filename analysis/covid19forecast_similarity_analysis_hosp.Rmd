@@ -645,58 +645,12 @@ tr_h + tr_l + plot_layout(ncol = 2)
 It seems that Google_Harvard-CPF and Covid19Sim-Simulator's differences from the ensemble model follow the trends shown by the truth data. 
 
 
-```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
-cd_diff_high_thurs <- total_frame_high_thurs %>%
-  dplyr::group_by(horizon,target_end_date) %>%
-  dplyr::filter(model_1 =="Google_Harvard-CPF",
-                model_2 == "Covid19Sim-Simulator") %>%
-  dplyr:: ungroup() 
-
-cd_diff_high_thurs$target_end_date <- anydate(cd_diff_high_thurs$target_end_date)
-
-ggplot(cd_diff_high_thurs, aes(x=target_end_date, y=mean_approx_cd)) + 
-   #   geom_point(alpha=0.6,size=0.8) + 
-      geom_line(alpha=0.4) +
-      ggtitle("Approx CD over Time - Covid19Sim-Simulator and Google_Harvard-CPF") +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
-      theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
-
-
-cd_diff_low_thurs <- total_frame_low_thurs %>%
-  dplyr::group_by(horizon,target_end_date) %>%
-  dplyr::filter(model_1 =="Google_Harvard-CPF",
-                model_2 == "Covid19Sim-Simulator") %>%
-  dplyr:: ungroup() 
-
-cd_diff_low_thurs$target_end_date <- anydate(cd_diff_low_thurs$target_end_date)
-
-ggplot(cd_diff_low_thurs, aes(x=target_end_date, y=mean_approx_cd)) + 
-   #   geom_point(alpha=0.6,size=0.8) + 
-      geom_line(alpha=0.4) +
-      ggtitle("Approx CD over Time - Covid19Sim-Simulator and Google_Harvard-CPF") +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
-      theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
-```
-These plots indicate that the difference between the models at the high count locations seems to shrink over time. Since the low count locations approx CD is so low, it is difficult to draw conclusions from the plots. 
-
 
 ```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
 hosp_truth_ca_ny <- hosp_truth_high %>%
-  filter(location %in% c("06", "36"))
+  filter(location %in% c("06", "36"), 
+         target_end_date >= filtered_start_date, 
+         target_end_date <= max(unique(h_frame_high_thurs$target_end_date)))
   
 hosp_pt_ca_ny <- read.csv("../data/point_frame_hosp_top.csv")  
 
@@ -966,55 +920,6 @@ ggplot(hosp_truth_low, aes(x = target_end_date, y = value, color = location_name
                    date_labels = "%m-%y")
 ```
 Like with the Thursday forecasts, it seems that Google_Harvard-CPF and Covid19Sim-Simulator's differences from the ensemble model follow the trends shown by the truth data. 
-
-
-```{r,out.width="95%", fig.align='center', message=FALSE, warning=FALSE}
-cd_diff_high_sat <- total_frame_high_sat %>%
-  dplyr::group_by(horizon,target_end_date) %>%
-  dplyr::filter(model_1 =="Google_Harvard-CPF",
-                model_2 == "Covid19Sim-Simulator") %>%
-  dplyr:: ungroup() 
-
-cd_diff_high_sat$target_end_date <- anydate(cd_diff_high_sat$target_end_date)
-
-ggplot(cd_diff_high_sat, aes(x=target_end_date, y=mean_approx_cd)) + 
-   #   geom_point(alpha=0.6,size=0.8) + 
-      geom_line(alpha=0.4) +
-      ggtitle("Approx CD over Time - Covid19Sim-Simulator and Google_Harvard-CPF") +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
-      theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
-
-
-cd_diff_low_sat <- total_frame_low_sat %>%
-  dplyr::group_by(horizon,target_end_date) %>%
-  dplyr::filter(model_1 =="Google_Harvard-CPF",
-                model_2 == "Covid19Sim-Simulator") %>%
-  dplyr:: ungroup() 
-
-cd_diff_low_sat$target_end_date <- anydate(cd_diff_low_sat$target_end_date)
-
-ggplot(cd_diff_low_sat, aes(x=target_end_date, y=mean_approx_cd)) + 
-   #   geom_point(alpha=0.6,size=0.8) + 
-      geom_line(alpha=0.4) +
-      ggtitle("Approx CD over Time - Covid19Sim-Simulator and Google_Harvard-CPF") +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
-      theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
-```
-Like with the Thursday forecasts, these plots indicate that the difference between the models at the high count locations seems to shrink over time. Since the low count locations approx CD is so low, it is difficult to draw conclusions from the plots. 
 
 
 We can also cluster the distances using hierarchical clustering. 
