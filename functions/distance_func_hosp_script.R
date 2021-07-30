@@ -52,8 +52,8 @@ plot_day_of_week_effect <- function(point_forecasts, model_name) {
 
 plot_day_of_week_effect_color <- function(point_forecasts, model_name) {
   ggplot(filter(point_forecasts, model == model_name)) + 
-    geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) +
-    geom_line(aes(x = target_end_date, y = agg_hosp, group = forecast_date)) +
+    geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type), size = 0.75) +
+    geom_line(aes(x = target_end_date, y = agg_hosp, group = forecast_date), size = 0.5) +
     labs(title = paste(model_name, "Forecasts"),
          x = "target end date" , y= "inc hosp") +
     theme(legend.position = "none")
