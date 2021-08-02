@@ -86,7 +86,7 @@ truth_high <- map_dfr(forecast_end_dates,
                                              locations = c(dlocs,clocs),
                                              temporal_resolution="weekly",
                                              data_location = "remote_hub_repo")}) %>%
-  dplyr::filter(target_end_date >= first_sat_end_date) %>%
+  dplyr::filter(target_end_date >= (first_sat_end_date)-7) %>%
   distinct() %>%
   write.csv(., file = "./data/truth_deathcase_h.csv")
 #---------------------------------------------------------------------------------------------#

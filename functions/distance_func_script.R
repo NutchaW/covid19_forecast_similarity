@@ -221,55 +221,40 @@ distance_heatmap <- function(sum_dist,name,metadata=NULL){
   }
 }
 
-scatter <-  function(data,title_name,metadata=NULL,smooth_tf=FALSE){
-  dat <- data %>% 
-    dplyr::left_join(metadata,by=c("model_2"="model_abbr")) %>%
-    dplyr::mutate(Model=model_2) 
-  if (is.null(metadata)) {
-    p<-ggplot(dat, aes(x=target_end_date, y=approx_cd,col=Model)) + 
-   #   geom_point(alpha=0.6,size=0.8) + 
-      geom_line(alpha=0.4) +
+scatter <-  function(data,title_name,type,xname,yname){
+  if(type=="wis"){
+    data %>% 
+      ggplot(., aes(x=wis, y=mean,color=factor(horizon))) + 
+      geom_point()+
+      stat_smooth(method = "loess", se = FALSE)+
       ggtitle(title_name) +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
-      theme(legend.text = element_text(size=5),
-            legend.title = element_text(size=7),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
-  } else if(smooth_tf){
-    ggplot(dat, aes(x=target_end_date, y=mean_approx_cd,
-                    col=Model,group=interaction(Model, model_type),linetype=model_type)) + 
-      geom_point(alpha=0.6,size=0.8) + 
-      stat_smooth(alpha=0.4,size=0.5,aes(x = target_end_date, y = mean_approx_cd), method = "loess",
-                  formula = y ~ x, se = FALSE) +
-    ggtitle(title_name) +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
+      ylab(yname) +
+      xlab(xname) +
       theme(legend.text = element_text(size=5),
             legend.title = element_text(size=9),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
-  }
-  else {
-    ggplot(dat, aes(x=target_end_date, y=mean_approx_cd,col=Model,group=interaction(Model, model_type),linetype=model_type)) + 
- #     geom_point(alpha=0.6,size=0.8) + 
-      geom_line(alpha=0.4) +
+            legend.key.size = unit(0.5, 'cm'))
+  } else if(type=="current"){
+    data %>% 
+      ggplot(., aes(x=truth, y=sim,color=factor(horizon))) + 
+      geom_point()+
+      stat_smooth(method = "loess", se = FALSE)+
       ggtitle(title_name) +
-      ylab("Approx. CD") +
-      xlab("Forecast End Date") +
-      facet_wrap(vars(horizon), nrow = 2,scales = "free") +
+      ylab(yname) +
+      xlab(xname) +
       theme(legend.text = element_text(size=5),
             legend.title = element_text(size=9),
-            axis.text.x=element_text(size=rel(0.7),angle=45,hjust=1),
-            legend.key.size = unit(0.5, 'cm'))+
-      scale_x_date(date_breaks = "1 month",
-                   date_labels = "%m-%y")
+            legend.key.size = unit(0.5, 'cm'))
+  }else if(type=="future"){
+    data %>% 
+      ggplot(., aes(x=sim, y=truth,color=factor(horizon))) + 
+      geom_point()+
+      stat_smooth(method = "loess", se = FALSE)+
+      ggtitle(title_name) +
+      ylab(yname) +
+      xlab(xname) +
+      theme(legend.text = element_text(size=5),
+            legend.title = element_text(size=9),
+            legend.key.size = unit(0.5, 'cm'))
   }
 }
 
@@ -312,10 +297,79 @@ dendro_plot <- function(horizon, frame_name,metadata,type=TRUE){
 } 
 
 catbox_plot <- function(dat,name){
-   ggplot(dat, aes(x=mech_type, y=mean_dis,fill=as.factor(horizon))) +
-   geom_boxplot() +
-   xlab("") +
-   ylab("Mean Approc. CD") +
+   ggplot(dat, aes(x=target_end_date, y=mean_approx_cd, group=target_end_date)) +
+   geom_boxplot(outlier.size = 0.5) +
+   facet_wrap(~horizon) +
+   xlab("Date") +
+   ylab("Mean Approx. CD") +
    guides(fill=guide_legend(title="horizon"))+
-   ggtitle(name)
+   ggtitle(name)+
+   scale_x_date(name=NULL, date_breaks = "1 months", date_labels = "%b-%y")+
+   theme(axis.text.x = element_text(angle=-45, hjust=-0.2,size=7),
+         axis.text.y = element_text(size=7),
+         plot.title = element_text(size=10),
+         axis.title=element_text(size=8))
 } 
+
+catbox_plot2 <- function(dat,name){
+  ggplot(dat, aes(x=target_end_date, y=mean_approx_cd,fill=factor(horizon))) +
+    geom_boxplot(outlier.size = 0.5) +
+    xlab("Forecast Date") +
+    ylab("Mean Approx. CD") +
+    guides(fill=guide_legend(title="horizon",label.position ="bottom",direction="horizontal"))+
+    ggtitle(name)+
+    theme(axis.text.x = element_text(size=7),
+          axis.text.y = element_text(size=7),
+          plot.title = element_text(size=10),
+          axis.title=element_text(size=8))
+} 
+
+plot_step <- function(forecasts, model1, model2,horizon){
+  # take filter data and plot step function for a pair of forecasts (1 target)
+  p_10 <- sort(unique(forecasts$quantile)) # quantile levels
+  mod1 <- unlist(c(forecasts[,grep(model1, colnames(forecasts))]))
+  mod2 <- unlist(forecasts[,grep(model2, colnames(forecasts))])
+  rge <- c(mod1,mod2)
+  cd <- covidHubUtils::calc_cramers_dist_unequal_space(q_F=mod1, tau_F=p_10, q_G=mod2, tau_G=p_10,
+                                                       approx_rule="trapezoid_riemann")
+  
+  # plot(mod1, p_10, type = "s", xlab = paste0(horizon,"-week ahead predictive quantiles"), ylab = "CDF", col = "red",xlim=c(min(rge)+100,max(rge)+100))
+  # lines(mod2, p_10, type = "s", col = "blue")
+  dat <- data.frame(rbind(cbind(mod1,p_10,rep(model1,length(p_10))),cbind(mod2,p_10,rep(model2,length(p_10)))))
+  names(dat)  <- c("q","p","Model")
+  dat$q <- as.numeric(dat$q)
+  dat$p <- as.numeric(dat$p)
+  p <- ggplot(dat,aes(x=q,y=p,group=Model,color=Model))+
+    geom_line()
+  p +
+    theme_bw() +
+    theme(legend.position="bottom",
+          text = element_text(size=5))+
+    xlab(paste0(horizon,"-week ahead predictive quantiles"))+
+    ylab("Probability level") +
+    annotate(geom="text", x=quantile(rge,0.90), y=0.2, label= paste0("approx. CD = ",round(cd,2)))
+}
+
+# plot_cd <- function(forecasts, model1, model2){
+#   # take filter data and plot cd for a pair of forecasts (1 target)
+#   p_10 <- sort(unique(forecasts$quantile)) # quantile levels
+#   mod1 <- unlist(c(forecasts[,grep(model1, colnames(forecasts))]))
+#   mod2 <- unlist(forecasts[,grep(model2, colnames(forecasts))])
+#   rge <- sort(c(mod1,mod2))
+#   cd <- covidHubUtils::calc_cramers_dist_unequal_space(q_F=mod1, tau_F=p_10, q_G=mod2, tau_G=p_10,
+#                                                        approx_rule="trapezoid_riemann")
+#   q0 <- c(sort(mod1), sort(mod2))
+#   # indicator whether the entry is from F or G
+#   q <- q0[order(q0)]
+#   tf <- unlist(sapply(q, function(x) ifelse(x %in% sort(mod1),p_10[which(x == sort(mod1))],0)))
+#   tg <- unlist(sapply(q, function(x) ifelse(x %in% sort(mod2),p_10[which(x == sort(mod1))],0)))
+#   #diffs_q <- diff(q)
+#   # probability level vectors
+#   tau_F_v <- cummax(tf)
+#   tau_G_v <- cummax(tg)
+#   #plot
+#   plot(sort(rge), (tau_F_v - tau_G_v)^2, type = "s", xlab = "x",
+#        ylab = "(F*(x) - G*(x))^2")
+#   polygon(sort(rge), (tau_F_v - tau_G_v)^2, col = "lightblue")
+#   legend("topleft", paste0("approx. CD = ",cd), col = "lightblue", pch = 15)
+# }
