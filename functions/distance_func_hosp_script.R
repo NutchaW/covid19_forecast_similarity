@@ -46,15 +46,17 @@ frame_format2 <- function(zoltr_frame){
 plot_day_of_week_effect <- function(point_forecasts, model_name) {
   ggplot(filter(point_forecasts, model == model_name)) + 
     geom_point(aes(x = target_end_date, y = agg_hosp, shape = day_type)) +
-    geom_line(aes(x = target_end_date, y = agg_hosp)) +
+    geom_line(aes(x = target_end_date, y = agg_hosp, group = forecast_date)) +
     labs(title = paste(model_name, "Forecasts"))
 }
 
 plot_day_of_week_effect_color <- function(point_forecasts, model_name) {
   ggplot(filter(point_forecasts, model == model_name)) + 
-    geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type)) +
-    geom_line(aes(x = target_end_date, y = agg_hosp)) +
-    labs(title = paste(model_name, "Forecasts"))
+    geom_point(aes(x = target_end_date, y = agg_hosp, color = day_type), size = 0.75) +
+    geom_line(aes(x = target_end_date, y = agg_hosp, group = forecast_date), size = 0.5) +
+    labs(title = paste(model_name, "Forecasts"),
+         x = "target end date" , y= "inc hosp") +
+    theme(legend.position = "none")
 }
 
 ## plots separate lines w/ diff color dots for weekdays vs weekends
@@ -67,6 +69,13 @@ plot_day_of_week_effect_sep <- function(point_forecasts, model_name) {
     theme(legend.position = "none")
 }
 
+plot_day_of_week_effect_facet <- function(point_forecasts) {
+  ggplot(point_forecasts, aes(x = target_end_date, y = agg_hosp)) + 
+    geom_point(aes(color = day_type)) +
+    geom_line(aes(group = forecast_date)) +
+    facet_wrap(vars(model), ncol = 2,scales = "free") +
+    labs(title = "Day of the Week Effect Plots")
+}
 
 # a function that takes a matrix and plot a heatmap
 distance_heatmap_wk <- function(sum_dist,name,metadata=NULL){
@@ -97,9 +106,9 @@ distance_heatmap_wk <- function(sum_dist,name,metadata=NULL){
             plot.margin=unit(c(0,0,0,0),"cm"))
   } else {
     set1<-c("red","blue","purple")
-    color_set <- ifelse(metadata$day_of_wk_effect == "FALSE", 
+    color_set <- ifelse(short_hday$day_of_wk_effect == "FALSE", 
                         set1[1], 
-                        ifelse(metadata$day_of_wk_effect ==  "TRUE",
+                        ifelse(short_hday$day_of_wk_effect ==  "TRUE",
                                set1[2],
                                set1[3]))
     type_color <-  color_set[order(match(metadata$model_abbr,order_list))]
