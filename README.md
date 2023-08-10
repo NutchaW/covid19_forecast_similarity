@@ -1,2 +1,2 @@
-# covid19_forecast_similarity
+# Forecast Similarity
 A repository for forecast similarity analysis
